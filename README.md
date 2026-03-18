@@ -1,6 +1,6 @@
 # DotNetMcpServer - AI Agent + MCP com .NET 10
 
-[![CI](https://github.com/SEU_USUARIO/dotnet-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/SEU_USUARIO/dotnet-mcp-server/actions/workflows/ci.yml)
+[![CI](https://github.com/danielcruzdev/dotnet-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/danielcruzdev/dotnet-mcp-server/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Projeto completo de estudo e portfólio com **AI Agent** + **MCP (Model Context Protocol)**, implementado do zero em **.NET 10**.
