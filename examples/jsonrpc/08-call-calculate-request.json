@@ -1,0 +1,12 @@
+﻿{
+  "_comment": "Chamada da ferramenta calculate_expression — calcula o custo mensal de infra",
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "tools/call",
+  "params": {
+    "name": "calculate_expression",
+    "arguments": {
+      "expression": "850 + 420 + 130 + 75 + 60"
+    }
+  }
+}

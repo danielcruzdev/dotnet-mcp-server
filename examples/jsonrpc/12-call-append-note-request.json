@@ -1,0 +1,13 @@
+﻿{
+  "_comment": "Chamada de append_study_note — salva uma anotacao sobre async/await",
+  "jsonrpc": "2.0",
+  "id": 6,
+  "method": "tools/call",
+  "params": {
+    "name": "append_study_note",
+    "arguments": {
+      "title": "async/await - ponto chave",
+      "note": "O await libera a thread enquanto espera I/O. Nunca usar .Result ou .Wait() — causa deadlock em contextos sincronizados como ASP.NET classic."
+    }
+  }
+}

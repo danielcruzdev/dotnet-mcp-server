@@ -1,0 +1,12 @@
+﻿{
+  "_comment": "Exemplo de ERRO — tentativa de path traversal bloqueada pelo servidor",
+  "jsonrpc": "2.0",
+  "id": 7,
+  "method": "tools/call",
+  "params": {
+    "name": "read_text_file",
+    "arguments": {
+      "path": "../../Windows/System32/drivers/etc/hosts"
+    }
+  }
+}

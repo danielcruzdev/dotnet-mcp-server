@@ -1,0 +1,5 @@
+﻿{
+  "_comment": "Passo 3: Cliente envia notificacao de que esta pronto (sem id = notificacao, sem resposta esperada)",
+  "jsonrpc": "2.0",
+  "method": "notifications/initialized"
+}

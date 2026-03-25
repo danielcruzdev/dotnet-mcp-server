@@ -1,0 +1,13 @@
+﻿{
+  "_comment": "Passo 1: Cliente envia initialize para fazer o handshake com o servidor",
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-03-26",
+    "clientInfo": {
+      "name": "dotnet-mcp-agent",
+      "version": "1.0.0"
+    }
+  }
+}

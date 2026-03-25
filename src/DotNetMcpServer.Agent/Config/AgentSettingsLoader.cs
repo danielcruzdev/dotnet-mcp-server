@@ -11,11 +11,60 @@ public static class AgentSettingsLoader
         var settings = LoadFromJson(applicationBaseDirectory);
         ApplyEnvironmentOverrides(settings);
 
-        settings.Mcp.WorkingDirectory = ResolveDirectory(settings.Mcp.WorkingDirectory, currentDirectory);
+        var workingDirectoryBase = ResolveWorkingDirectoryBase(settings.Mcp.WorkingDirectory, applicationBaseDirectory, currentDirectory);
+        settings.Mcp.WorkingDirectory = workingDirectoryBase;
         settings.Mcp.WorkspaceRoot = ResolveDirectory(settings.Mcp.WorkspaceRoot, settings.Mcp.WorkingDirectory);
         settings.Runtime.MaxToolIterations = Math.Clamp(settings.Runtime.MaxToolIterations, 1, 12);
 
         return settings;
+    }
+
+    /// <summary>
+    /// Resolves the working directory. If the configured path is relative (or "."),
+    /// it first tries to anchor it to the repository root (found by searching for a *.sln
+    /// file walking up from <paramref name="applicationBaseDirectory"/>). Falls back to
+    /// <paramref name="currentDirectory"/> when no solution root is found.
+    /// Absolute paths are returned as-is.
+    /// </summary>
+    private static string ResolveWorkingDirectoryBase(string configuredPath, string applicationBaseDirectory, string currentDirectory)
+    {
+        if (Path.IsPathFullyQualified(configuredPath))
+        {
+            return configuredPath;
+        }
+
+        var repositoryRoot = FindRepositoryRoot(applicationBaseDirectory);
+        var baseDirectory = repositoryRoot ?? currentDirectory;
+
+        return ResolveDirectory(configuredPath, baseDirectory);
+    }
+
+    /// <summary>
+    /// Walks up the directory tree from <paramref name="startDirectory"/> looking for a
+    /// folder that contains at least one <c>*.sln</c> file, which indicates the repository root.
+    /// Returns <c>null</c> if no such folder is found.
+    /// </summary>
+    private static string? FindRepositoryRoot(string startDirectory)
+    {
+        var current = Path.GetFullPath(startDirectory);
+
+        while (!string.IsNullOrEmpty(current))
+        {
+            if (Directory.GetFiles(current, "*.sln", SearchOption.TopDirectoryOnly).Length > 0)
+            {
+                return current;
+            }
+
+            var parent = Path.GetDirectoryName(current);
+            if (parent is null || parent == current)
+            {
+                break;
+            }
+
+            current = parent;
+        }
+
+        return null;
     }
 
     private static AgentSettings LoadFromJson(string baseDirectory)

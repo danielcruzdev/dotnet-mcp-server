@@ -1,0 +1,11 @@
+﻿{
+  "_comment": "Resposta de calculate_expression — resultado = 1535",
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "content": [
+      { "type": "text", "text": "Resultado: 1535" }
+    ],
+    "isError": false
+  }
+}

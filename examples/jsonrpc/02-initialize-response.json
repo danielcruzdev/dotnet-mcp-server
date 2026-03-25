@@ -1,0 +1,15 @@
+﻿{
+  "_comment": "Passo 2: Servidor responde com suas capacidades e versao do protocolo",
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2025-03-26",
+    "serverInfo": {
+      "name": "dotnet-mcp-server",
+      "version": "1.0.0"
+    },
+    "capabilities": {
+      "tools": {}
+    }
+  }
+}

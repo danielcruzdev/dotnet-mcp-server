@@ -1,0 +1,14 @@
+﻿{
+  "_comment": "Resposta de ERRO — isError true indica falha da ferramenta (nao erro de protocolo)",
+  "jsonrpc": "2.0",
+  "id": 7,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Acesso negado: o arquivo precisa estar dentro do workspace."
+      }
+    ],
+    "isError": true
+  }
+}

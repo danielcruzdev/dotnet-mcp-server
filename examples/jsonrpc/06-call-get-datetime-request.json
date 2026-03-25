@@ -1,0 +1,10 @@
+﻿{
+  "_comment": "Chamada da ferramenta get_current_datetime sem timezone (retorna UTC)",
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "get_current_datetime",
+    "arguments": {}
+  }
+}

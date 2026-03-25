@@ -1,0 +1,11 @@
+﻿{
+  "_comment": "Resposta de get_current_datetime — hora atual em UTC",
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "content": [
+      { "type": "text", "text": "UTC agora: 2026-03-24T12:34:56.0000000+00:00" }
+    ],
+    "isError": false
+  }
+}

@@ -1,0 +1,14 @@
+﻿{
+  "_comment": "Resposta de append_study_note — confirma onde a nota foi salva",
+  "jsonrpc": "2.0",
+  "id": 6,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Anotacao salva em: C:\\dev\\ai\\dotnet-mcp-server\\notes\\study-notes.md"
+      }
+    ],
+    "isError": false
+  }
+}

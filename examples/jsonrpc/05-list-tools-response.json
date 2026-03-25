@@ -1,0 +1,54 @@
+﻿{
+  "_comment": "Resposta do tools/list — servidor retorna todas as ferramentas disponiveis",
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "tools": [
+      {
+        "name": "append_study_note",
+        "description": "Cria ou adiciona uma anotacao em notes/study-notes.md.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "description": "Titulo da anotacao" },
+            "note":  { "type": "string", "description": "Conteudo da anotacao" }
+          },
+          "required": ["note"]
+        }
+      },
+      {
+        "name": "calculate_expression",
+        "description": "Calcula expressoes matematicas basicas com +, -, *, / e parenteses.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "expression": { "type": "string", "description": "Expressao matematica. Ex.: (1200 + 85) / 5" }
+          },
+          "required": ["expression"]
+        }
+      },
+      {
+        "name": "get_current_datetime",
+        "description": "Retorna a data e hora atual, opcionalmente convertida para um timezone especifico.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "timezone": { "type": "string", "description": "Timezone IANA/Windows. Ex.: America/Sao_Paulo" }
+          }
+        }
+      },
+      {
+        "name": "read_text_file",
+        "description": "Le um arquivo de texto dentro do workspace do projeto.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path":          { "type": "string",  "description": "Caminho relativo ao workspace. Ex.: README.md" },
+            "maxCharacters": { "type": "integer", "description": "Limite maximo de caracteres (200-8000)", "minimum": 200, "maximum": 8000 }
+          },
+          "required": ["path"]
+        }
+      }
+    ]
+  }
+}

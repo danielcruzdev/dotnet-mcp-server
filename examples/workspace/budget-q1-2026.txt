@@ -1,0 +1,30 @@
+﻿# Orcamento do Projeto - Q1 2026
+## Custos de Infraestrutura (mensais em R$)
+Servidor principal (cloud)  : 850
+Banco de dados gerenciado   : 420
+CDN e armazenamento         : 130
+Monitoramento e logs        :  75
+CI/CD e build               :  60
+Total mensal infra: 850 + 420 + 130 + 75 + 60
+---
+## Licencas de Software (anuais em R$)
+JetBrains All Products : 2400
+GitHub Teams           :  960
+Datadog (10 hosts)     : 3600
+Custo mensal medio de licencas: (2400 + 960 + 3600) / 12
+---
+## Estimativa de Horas - Sprint 1
+Levantamento de requisitos : 8
+Arquitetura e design       : 12
+Implementacao backend      : 40
+Testes unitarios           : 16
+Code review + ajustes      : 10
+Total de horas: 8 + 12 + 40 + 16 + 10
+Custo com dev senior (R$ 120/h): 86 * 120
+---
+## Projecao de Receita (3 meses)
+Plano Basic      : 50 clientes * 99
+Plano Pro        : 20 clientes * 299
+Plano Enterprise :  5 clientes * 999
+Receita mensal total  : (50 * 99) + (20 * 299) + (5 * 999)
+Receita trimestral    : ((50 * 99) + (20 * 299) + (5 * 999)) * 3

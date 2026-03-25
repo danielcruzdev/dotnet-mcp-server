@@ -1,0 +1,7 @@
+﻿{
+  "_comment": "Passo 4: Cliente lista as ferramentas disponiveis no servidor",
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/list",
+  "params": {}
+}

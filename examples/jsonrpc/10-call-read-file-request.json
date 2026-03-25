@@ -1,0 +1,13 @@
+﻿{
+  "_comment": "Chamada de read_text_file — le as tarefas do projeto",
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "tools/call",
+  "params": {
+    "name": "read_text_file",
+    "arguments": {
+      "path": "examples/workspace/tasks.md",
+      "maxCharacters": 2000
+    }
+  }
+}
