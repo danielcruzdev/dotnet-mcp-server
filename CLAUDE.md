@@ -1,8 +1,81 @@
 # CLAUDE.md
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+## The project
 
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+A production-shaped MCP server and AI agent in .NET 10, built on the **official
+`ModelContextProtocol` SDK** (Tier 1, maintained with Microsoft) — with a hand-written
+protocol implementation kept alongside it as a study artifact.
+
+The pitch is not "I implemented a protocol." It is: *implemented the stdio transport by hand
+to understand it, proved it interoperates, then shipped on the official SDK — because the spec
+ships a new revision every few months.* Depth **and** judgement. Read `.specs/PRD.md` §4 for
+the full reasoning; it also records that an earlier revision argued the opposite and why that
+was reversed.
+
+## Hard constraints
+
+These break silently. Every one has already cost real time.
+
+**stdout belongs to the MCP protocol.** No `Console.WriteLine` anywhere in
+`DotNetMcpServer.Server`. Logging goes through `ILogger`, pinned to stderr in `Program.cs` via
+`LogToStandardErrorThreshold`. A single stray write corrupts the session for every client.
+
+**Never launch the server with `dotnet run`.** MSBuild writes to stdout — the protocol
+channel. `AgentSettingsLoader.ResolveServerCommand` resolves the compiled binary; keep it that
+way, including in docs and client config.
+
+**`src/Mcp.Protocol.Handwritten/` is frozen.** A study artifact, referenced by nothing
+shipped. Correcting it is in scope; extending it to new spec revisions is an explicit non-goal.
+Its types — `IMcpTool`, `McpToolCallResult`, `ToolRegistry` — must never appear in shipped code.
+
+**`InvariantGlobalization` stays `false`.** Turning it on disables ICU, which breaks IANA
+timezone resolution in `get_current_datetime`. It is pinned with a comment in
+`Directory.Build.props`. This has already happened once.
+
+**English only** in `src/` — comments, log messages, exception text, identifiers. The
+migration away from Portuguese is deliberate (finding D3).
+
+**Zero warnings.** `TreatWarningsAsErrors` is on with analyzers. A warning is a broken build,
+not a suggestion.
+
+## Commands
+
+```bash
+dotnet build DotNetMcpServer.slnx --nologo        # must be 0 warnings, 0 errors
+dotnet test  DotNetMcpServer.slnx --nologo -v q
+```
+
+`tests/DotNetMcpServer.Tests/Integration/` launches the built server as a real subprocess and
+drives it with the official SDK client. **That is the only check that proves the server works** —
+unit tests say nothing about protocol reachability, and piping JSON at the binary produces a
+false negative. See the `verify-mcp-server` skill before diagnosing any protocol problem.
+
+## Layout
+
+```
+src/DotNetMcpServer.Server/       SDK-based MCP server; tools are [McpServerTool] methods
+src/DotNetMcpServer.Agent/        console agent; SDK client + OpenAI tool-calling
+src/Mcp.Protocol.Handwritten/     frozen study artifact
+tests/DotNetMcpServer.Tests/      Tools (unit) · Protocol (artifact) · Integration (interop)
+.specs/PRD.md                     audit of 34 findings + 8-phase roadmap
+.specs/PROGRESSO.md               live task tracker + decision log
+```
+
+## Working the roadmap
+
+`.specs/PRD.md` holds the reasoning, `.specs/PROGRESSO.md` holds the state. Task ids (`F1-10`,
+`F5-07`) prefix commits. Mark a task ✅ only after verification, never at "it compiles", and
+record regressions honestly — a tracker that only improves is one nobody trusts.
+
+Deviations from the PRD go in the decision log with their reason, including dropped tasks. That
+file is the project's main portfolio artifact after the code. Use the `roadmap-task` skill.
+
+---
+
+# Behavioral guidelines
+
+Reduce common LLM coding mistakes. **Tradeoff:** these bias toward caution over speed. For
+trivial tasks, use judgment.
 
 ## 1. Think Before Coding
 
@@ -58,8 +131,11 @@ For multi-step tasks, state a brief plan:
 3. [Step] → verify: [check]
 ```
 
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+Strong success criteria let you loop independently. Weak criteria ("make it work") require
+constant clarification.
 
 ---
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to
+overcomplication, and clarifying questions come before implementation rather than after
+mistakes.
