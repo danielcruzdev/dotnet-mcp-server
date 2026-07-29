@@ -62,7 +62,7 @@ public sealed class HandwrittenMcpServer
     {
         if (notification.Method == McpMethods.InitializedNotification)
         {
-            Console.Error.WriteLine("[mcp-server] cliente inicializado.");
+            Console.Error.WriteLine("[handwritten-mcp] client initialised.");
         }
     }
 
@@ -70,7 +70,7 @@ public sealed class HandwrittenMcpServer
     {
         if (request.Id is null)
         {
-            return JsonRpcMessage.CreateError(null, JsonRpcErrorCodes.InvalidRequest, "Request sem id.");
+            return JsonRpcMessage.CreateError(null, JsonRpcErrorCodes.InvalidRequest, "Request has no id.");
         }
 
         return request.Method switch
@@ -78,20 +78,44 @@ public sealed class HandwrittenMcpServer
             McpMethods.Initialize => HandleInitialize(request),
             McpMethods.ListTools => HandleToolsList(request),
             McpMethods.CallTool => await HandleToolCallAsync(request, cancellationToken),
-            _ => JsonRpcMessage.CreateError(request.Id, JsonRpcErrorCodes.MethodNotFound, $"Método '{request.Method}' não encontrado.")
+            _ => JsonRpcMessage.CreateError(request.Id, JsonRpcErrorCodes.MethodNotFound, $"Method '{request.Method}' not found.")
         };
+    }
+
+    /// <summary>
+    /// Protocol revisions this server can actually speak, newest first.
+    /// </summary>
+    private static readonly string[] SupportedProtocolVersions =
+    [
+        "2025-11-25",
+        "2025-06-18",
+        "2025-03-26"
+    ];
+
+    /// <summary>
+    /// Negotiates the protocol revision per the MCP lifecycle: honour the client's request
+    /// when it is supported, otherwise answer with the newest revision this server speaks and
+    /// let the client decide whether to continue. Echoing the client's version back
+    /// unconditionally — as this once did — claims support for revisions that were never
+    /// implemented.
+    /// </summary>
+    private static string NegotiateProtocolVersion(string? requested, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(requested) && SupportedProtocolVersions.Contains(requested, StringComparer.Ordinal))
+        {
+            return requested;
+        }
+
+        return SupportedProtocolVersions[0] is { Length: > 0 } newest ? newest : fallback;
     }
 
     private JsonRpcMessage HandleInitialize(JsonRpcMessage request)
     {
         var initializeRequest = request.Params?.Deserialize<McpInitializeRequest>(JsonDefaults.SerializerOptions);
-        var protocolVersion = string.IsNullOrWhiteSpace(initializeRequest?.ProtocolVersion)
-            ? _protocolVersion
-            : initializeRequest.ProtocolVersion;
 
         var result = new McpInitializeResult
         {
-            ProtocolVersion = protocolVersion ?? _protocolVersion,
+            ProtocolVersion = NegotiateProtocolVersion(initializeRequest?.ProtocolVersion, _protocolVersion),
             ServerInfo = new McpServerInfo
             {
                 Name = _serverName,
@@ -120,18 +144,18 @@ public sealed class HandwrittenMcpServer
     {
         if (request.Params is not JsonObject rawParams)
         {
-            return JsonRpcMessage.CreateError(request.Id, JsonRpcErrorCodes.InvalidParams, "Parâmetros do tools/call inválidos.");
+            return JsonRpcMessage.CreateError(request.Id, JsonRpcErrorCodes.InvalidParams, "Invalid tools/call parameters.");
         }
 
         var callRequest = rawParams.Deserialize<McpToolCallRequest>(JsonDefaults.SerializerOptions);
         if (callRequest is null || string.IsNullOrWhiteSpace(callRequest.Name))
         {
-            return JsonRpcMessage.CreateError(request.Id, JsonRpcErrorCodes.InvalidParams, "Payload de tools/call inválido.");
+            return JsonRpcMessage.CreateError(request.Id, JsonRpcErrorCodes.InvalidParams, "Invalid tools/call payload.");
         }
 
         if (!_toolRegistry.TryGet(callRequest.Name, out var tool) || tool is null)
         {
-            return JsonRpcMessage.CreateError(request.Id, JsonRpcErrorCodes.InvalidParams, $"Tool '{callRequest.Name}' não existe.");
+            return JsonRpcMessage.CreateError(request.Id, JsonRpcErrorCodes.InvalidParams, $"Tool '{callRequest.Name}' does not exist.");
         }
 
         try
@@ -141,8 +165,8 @@ public sealed class HandwrittenMcpServer
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"[mcp-server] erro em '{callRequest.Name}': {exception.Message}");
-            var result = McpToolCallResult.Fail($"Falha ao executar '{callRequest.Name}': {exception.Message}");
+            Console.Error.WriteLine($"[handwritten-mcp] error in '{callRequest.Name}': {exception.Message}");
+            var result = McpToolCallResult.Fail($"Failed to execute '{callRequest.Name}': {exception.Message}");
             return JsonRpcMessage.CreateResult(request.Id!, JsonSerializer.SerializeToNode(result, JsonDefaults.SerializerOptions));
         }
     }

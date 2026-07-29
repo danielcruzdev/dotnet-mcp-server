@@ -1,15 +1,39 @@
-using System.Text;
+using System.Buffers;
+using System.IO.Pipelines;
 using System.Text.Json;
 using Mcp.Protocol.Handwritten.Json;
 
 namespace Mcp.Protocol.Handwritten.JsonRpc;
 
+/// <summary>
+/// A newline-delimited JSON-RPC channel over a pair of streams, as the MCP stdio transport
+/// requires.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The MCP specification is explicit: <i>"Messages are delimited by newlines, and MUST NOT
+/// contain embedded newlines."</i> An earlier version of this type framed messages with an
+/// LSP-style <c>Content-Length</c> header, which no MCP client understands — the defect this
+/// artifact exists to document.
+/// </para>
+/// <para>
+/// Reading goes through <see cref="PipeReader"/>, so a message is found by scanning buffered
+/// spans for <c>\n</c>. The previous implementation issued one <c>await</c> and one
+/// single-byte array allocation per byte read.
+/// </para>
+/// <para>
+/// Writing is safe because <see cref="JsonSerializer"/> escapes newlines inside string values
+/// as <c>\n</c>, so a serialized message is always one line. <see cref="WriteMessageAsync"/>
+/// asserts that rather than assuming it.
+/// </para>
+/// </remarks>
 public sealed class JsonRpcConnection : IAsyncDisposable
 {
-    private static readonly byte[] HeaderDelimiter = new byte[] { 13, 10, 13, 10 };
+    private const byte NewLine = (byte)'\n';
 
     private readonly Stream _input;
     private readonly Stream _output;
+    private readonly PipeReader _reader;
     private readonly bool _ownsStreams;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
 
@@ -18,38 +42,60 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         _input = input;
         _output = output;
         _ownsStreams = ownsStreams;
+        _reader = PipeReader.Create(input, new StreamPipeReaderOptions(leaveOpen: true));
     }
 
+    /// <summary>
+    /// Reads the next message, or returns <c>null</c> once the peer closes the stream.
+    /// </summary>
     public async Task<JsonRpcMessage?> ReadMessageAsync(CancellationToken cancellationToken)
     {
-        var headers = await ReadHeadersAsync(cancellationToken);
-        if (headers is null)
+        while (true)
         {
-            return null;
+            var read = await _reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            var buffer = read.Buffer;
+
+            if (TryReadLine(ref buffer, out var line))
+            {
+                var message = line.Length == 0 ? null : Deserialize(line);
+                _reader.AdvanceTo(buffer.Start, buffer.End);
+
+                // A blank line between messages is not a message; skip it rather than
+                // failing the session.
+                if (message is null)
+                {
+                    continue;
+                }
+
+                return message;
+            }
+
+            _reader.AdvanceTo(buffer.Start, buffer.End);
+
+            if (read.IsCompleted)
+            {
+                // A trailing message with no closing newline is still a message.
+                return buffer.Length > 0 ? Deserialize(buffer) : null;
+            }
         }
-
-        if (!headers.TryGetValue("content-length", out var rawContentLength) || !int.TryParse(rawContentLength, out var contentLength) || contentLength < 0)
-        {
-            throw new InvalidDataException("Cabeçalho Content-Length inválido no stream JSON-RPC.");
-        }
-
-        var payload = await ReadExactlyAsync(contentLength, cancellationToken);
-        var message = JsonSerializer.Deserialize<JsonRpcMessage>(payload, JsonDefaults.SerializerOptions);
-
-        return message ?? throw new InvalidDataException("Não foi possível desserializar a mensagem JSON-RPC.");
     }
 
     public async Task WriteMessageAsync(JsonRpcMessage message, CancellationToken cancellationToken)
     {
         var payload = JsonSerializer.SerializeToUtf8Bytes(message, JsonDefaults.SerializerOptions);
-        var headerBytes = Encoding.ASCII.GetBytes($"Content-Length: {payload.Length}\r\n\r\n");
 
-        await _writeLock.WaitAsync(cancellationToken);
+        if (Array.IndexOf(payload, NewLine) >= 0)
+        {
+            throw new InvalidOperationException(
+                "A JSON-RPC message must not contain an embedded newline; the peer would read it as two messages.");
+        }
+
+        await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await _output.WriteAsync(headerBytes.AsMemory(), cancellationToken);
-            await _output.WriteAsync(payload.AsMemory(), cancellationToken);
-            await _output.FlushAsync(cancellationToken);
+            await _output.WriteAsync(payload.AsMemory(), cancellationToken).ConfigureAwait(false);
+            await _output.WriteAsync(new[] { NewLine }.AsMemory(), cancellationToken).ConfigureAwait(false);
+            await _output.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -57,107 +103,48 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
     }
 
-    private async Task<Dictionary<string, string>?> ReadHeadersAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Splits the first newline-terminated line off <paramref name="buffer"/>, leaving the
+    /// remainder for the next read.
+    /// </summary>
+    private static bool TryReadLine(ref ReadOnlySequence<byte> buffer, out ReadOnlySequence<byte> line)
     {
-        var headerBytes = new List<byte>(256);
-        var matched = 0;
-
-        while (true)
+        var position = buffer.PositionOf(NewLine);
+        if (position is null)
         {
-            var next = await ReadSingleByteAsync(cancellationToken);
-            if (next is null)
-            {
-                if (headerBytes.Count == 0)
-                {
-                    return null;
-                }
-
-                throw new EndOfStreamException("Stream finalizado no meio dos cabeçalhos JSON-RPC.");
-            }
-
-            var value = next.Value;
-            headerBytes.Add(value);
-
-            if (value == HeaderDelimiter[matched])
-            {
-                matched++;
-                if (matched == HeaderDelimiter.Length)
-                {
-                    break;
-                }
-            }
-            else
-            {
-                matched = value == HeaderDelimiter[0] ? 1 : 0;
-            }
+            line = default;
+            return false;
         }
 
-        var headerWithoutDelimiter = headerBytes.Take(headerBytes.Count - HeaderDelimiter.Length).ToArray();
-        var headerText = Encoding.ASCII.GetString(headerWithoutDelimiter);
-        var parsedHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        line = buffer.Slice(0, position.Value);
+        buffer = buffer.Slice(buffer.GetPosition(1, position.Value));
 
-        foreach (var line in headerText.Split("\r\n", StringSplitOptions.RemoveEmptyEntries))
-        {
-            var separatorIndex = line.IndexOf(':');
-            if (separatorIndex <= 0)
-            {
-                continue;
-            }
-
-            var key = line[..separatorIndex].Trim();
-            var value = line[(separatorIndex + 1)..].Trim();
-            parsedHeaders[key] = value;
-        }
-
-        return parsedHeaders;
+        return true;
     }
 
-    private async Task<byte?> ReadSingleByteAsync(CancellationToken cancellationToken)
+    private static JsonRpcMessage Deserialize(in ReadOnlySequence<byte> line)
     {
-        var buffer = new byte[1];
-        var bytesRead = await _input.ReadAsync(buffer.AsMemory(0, 1), cancellationToken);
-        if (bytesRead == 0)
-        {
-            return null;
-        }
+        var jsonReader = new Utf8JsonReader(line);
 
-        return buffer[0];
-    }
-
-    private async Task<byte[]> ReadExactlyAsync(int length, CancellationToken cancellationToken)
-    {
-        var payload = new byte[length];
-        var offset = 0;
-
-        while (offset < length)
-        {
-            var read = await _input.ReadAsync(payload.AsMemory(offset, length - offset), cancellationToken);
-            if (read == 0)
-            {
-                throw new EndOfStreamException("Stream finalizado no meio do payload JSON-RPC.");
-            }
-
-            offset += read;
-        }
-
-        return payload;
+        return JsonSerializer.Deserialize<JsonRpcMessage>(ref jsonReader, JsonDefaults.SerializerOptions)
+            ?? throw new InvalidDataException("Could not deserialize the JSON-RPC message.");
     }
 
     public async ValueTask DisposeAsync()
     {
         _writeLock.Dispose();
+        await _reader.CompleteAsync().ConfigureAwait(false);
 
-        if (_ownsStreams)
+        if (!_ownsStreams)
         {
-            await _input.DisposeAsync();
+            return;
+        }
 
-            if (!ReferenceEquals(_input, _output))
-            {
-                await _output.DisposeAsync();
-            }
+        await _input.DisposeAsync().ConfigureAwait(false);
+
+        if (!ReferenceEquals(_input, _output))
+        {
+            await _output.DisposeAsync().ConfigureAwait(false);
         }
     }
 }
-
-
-

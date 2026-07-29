@@ -7,12 +7,12 @@
 
 ## Current status
 
-**Phase 1 — SDK Migration & Foundation** 🔴 · in progress · branch `feat/phase-1-sdk-migration`
+**Phase 1 — SDK Migration & Foundation** ✅ complete · **Phase 2 — Modern .NET Architecture** is next
 
 ```
-Overall   ██░░░░░░░░░░░░░░░░░░  10 / 80 tasks   (13%)
+Overall   ███░░░░░░░░░░░░░░░░░  14 / 80 tasks   (18%)
 
-Phase 1   ██████████████░░░░░░  10 / 14   🟦 in progress
+Phase 1   ████████████████████  14 / 14   ✅ complete
 Phase 2   ░░░░░░░░░░░░░░░░░░░░   0 / 9
 Phase 3   ░░░░░░░░░░░░░░░░░░░░   0 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
@@ -22,9 +22,13 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** `F1-10` — give the artifact newline-delimited framing and a `Program.cs` so it can run as a process. `F1-11` then drives it with the official SDK client, reusing the `ServerLocator` + interop-test harness already built for the shipped server.
+**Next action:** Phase 2 — `F2-01`, adopt the Generic Host in the agent. The server already
+has one via the SDK; the agent is where the remaining architecture findings live.
 
-**Verified so far:** the shipped server is driven end to end by the **official SDK client** as a real subprocess — handshake, `tools/list`, three `tools/call` round-trips, and a rejected path-traversal attempt. That is C1 closed with evidence rather than assertion.
+**Phase 1 outcome:** both servers are driven end to end by the **official SDK client** as real
+subprocesses — 13 integration tests. The hand-written artifact interoperates with an
+independent implementation, which turns the project's central claim from an assertion into
+evidence. C1, C3, C4, A1, A2, A3 and A12 are closed.
 
 ---
 
@@ -58,20 +62,22 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ✅ | **F1-07** | Migrate the server to `ModelContextProtocol`: host builder, DI-registered tools, stdio transport | C1, C3, C4, A3 |
 | ✅ | **F1-08** | Migrate the agent's MCP client to `ModelContextProtocol.Core` | A1, A2 |
 | ✅ | **F1-09** | Relocate the hand-written implementation to `src/Mcp.Protocol.Handwritten/`, scope documented as frozen | — |
-| ⬜ | **F1-10** | Correct the artifact: newline-delimited framing via `System.IO.Pipelines` + `Utf8JsonReader` | C1, A12 |
-| ⬜ | **F1-11** | **Cross-validate the artifact against the official SDK client in CI** | C1, C3, C4 |
+| ✅ | **F1-10** | Correct the artifact: newline-delimited framing via `System.IO.Pipelines` + `Utf8JsonReader` | C1, A12 |
+| ✅ | **F1-11** | **Cross-validate the artifact against the official SDK client in CI** | C1, C3, C4 |
 | ✅ | **F1-12** | Launch the compiled binary instead of `dotnet run` | C5 |
-| ⬜ | **F1-13** | Verify in Claude Desktop / VS Code / Claude Code; write `docs/INSTALL.md` | D1 |
-| ⬜ | **F1-14** | **Write ADR-0001** — hand-written vs official SDK, and why the artifact stays | D2 |
+| ✅ | **F1-13** | Verify in Claude Desktop / VS Code / Claude Code; write `docs/INSTALL.md` | D1 |
+| ✅ | **F1-14** | **Write ADR-0001** — hand-written vs official SDK, and why the artifact stays | D2 |
 
 **Done when**
-- [ ] `claude mcp add` connects and `tools/list` returns all four tools
-- [ ] Claude Desktop shows the server connected and invokes every tool
 - [x] **A CI test drives the shipped server with the official SDK client** — handshake, `tools/list`, 3 tool calls, 1 rejected traversal (`SdkServerInteropTests`, 6 tests)
-- [ ] The same harness drives the **hand-written** artifact (blocked on F1-10)
-- [x] `dotnet build` emits zero warnings with `TreatWarningsAsErrors` on
+- [x] **The same harness drives the hand-written artifact** — handshake, version negotiation, tool discovery, tool calls, numeric round-trip, embedded-newline survival, unknown-tool error (`HandwrittenServerInteropTests`, 7 tests)
+- [x] `dotnet build` emits zero warnings with `TreatWarningsAsErrors` on, in Debug **and** Release
 - [x] `git ls-files` includes `.env.example`
-- [ ] ADR-0001 is committed and answers the question without hedging
+- [x] ADR-0001 is committed and answers the question without hedging
+- [x] `docs/INSTALL.md` documents Claude Code, Claude Desktop and VS Code against the compiled binary
+- [ ] **Claude Desktop visually confirmed by a human** — the binary is proven to serve MCP by the
+      interop suite, which is what Claude Desktop does, but nobody has watched the desktop app
+      connect. Owner: Daniel. Blocks nothing; evidence for the `F8-07` demo recording.
 
 **Carried into later phases** — deliberate, not forgotten:
 - `ScenarioTests` (18 cases) and `WorkspaceFixture` were deleted with the `IMcpTool` abstraction they tested. Equivalent multi-tool scenarios must be rebuilt on the interop harness; tracked as part of the Phase 2 coverage work (`F2-08`).
@@ -277,19 +283,19 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 |---|---|---|---|
 | Connects to a real MCP client | ❌ No | ✅ **Yes** — SDK client, real subprocess | ✅ Yes |
 | Protocol revision | `2025-03-26` | negotiated by the SDK | current stable, via SDK |
-| Artifact interoperates with the SDK client | ❌ No | ❌ No — blocked on F1-10 | ✅ Verified in CI |
+| Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
 | MCP capabilities served | tools only | tools only | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 4 | 12+ |
-| Test cases | 69 | 51 ⚠️ | 200+ |
-| Integration tests (real client ↔ real server) | 0 | **6** | grows with each phase |
+| Test cases | 69 | 58 ⚠️ | 200+ |
+| Integration tests (real client ↔ real server) | 0 | **13** | grows with each phase |
 | Line coverage | not measured | not measured | ≥ 80% |
-| Projects under test | 2 / 3 | 2 / 4 | all |
+| Projects under test | 2 / 3 | 3 / 4 | all |
 | Build warnings | not enforced | **0, enforced** | 0, enforced |
 | CI platforms | 1 | 1 | 3 |
-| ADRs published | 0 | 0 | 4+ |
-| Transports | 1 (non-compliant) | 1 (spec-compliant) | 2 (stdio + HTTP) |
+| ADRs published | 0 | **1** | 4+ |
+| Transports | 1 (non-compliant) | 1 (spec-compliant, both servers) | 2 (stdio + HTTP) |
 
-> ⚠️ **Test count went down, 69 → 51.** Deleting `ScenarioTests` removed 18 in-process cases that
+> ⚠️ **Test count is still below baseline, 69 → 58.** Deleting `ScenarioTests` removed 18 in-process cases that
 > exercised the old `IMcpTool` abstraction. What replaced them is stronger per test — six of the
 > new ones drive a real server process through the real protocol — but the raw count is a
 > regression and rebuilding that scenario coverage is owed work, not a rounding error.

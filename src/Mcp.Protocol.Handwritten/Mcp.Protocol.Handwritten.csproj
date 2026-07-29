@@ -1,5 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Settings come from Directory.Build.props. -->
+  <!--
+    The hand-written MCP implementation, kept as a study artifact.
+
+    Nothing shipped references this project: DotNetMcpServer.Server and .Agent are built on the
+    official ModelContextProtocol SDK. It is an executable so a real MCP client can launch it
+    and prove it interoperates. See tests/DotNetMcpServer.Tests/Integration.
+
+    Its scope is FROZEN: stdio transport, JSON-RPC framing, and the core tools/* methods.
+    Extending it to new spec revisions or new capabilities is an explicit non-goal, because
+    that is the maintenance treadmill the SDK decision exists to avoid. See .specs/PRD.md
+    section 5 and docs/adr/0001-official-sdk-with-handwritten-artifact.md.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
 
 </Project>
