@@ -25,6 +25,7 @@ Thumbs.db
 # Local environment
 .env
 .env.*
+!.env.example
 
 # Local CLI folders used in this workspace
 .dotnet/

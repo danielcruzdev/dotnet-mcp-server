@@ -71,7 +71,7 @@ flowchart LR
 │     ├─ Examples/              # Testes de cenário realistas (18 testes)
 │     └─ Tools/                 # Testes unitários por ferramenta
 ├─ notes/                       # Notas geradas pelo append_study_note (gitignore)
-├─ DotNetMcpServer.sln
+├─ DotNetMcpServer.slnx
 └─ README.md
 ```
 
@@ -124,7 +124,7 @@ Também é possível sobrescrever por variável de ambiente (veja `.env.example`
 
 ## Como executar
 
-O agente detecta automaticamente a raiz do repositório (procurando pelo `.sln`), portanto **funciona a partir de qualquer diretório** — terminal ou IDE.
+O agente detecta automaticamente a raiz do repositório (procurando pelo arquivo de solução ou pela pasta `.git`), portanto **funciona a partir de qualquer diretório** — terminal ou IDE.
 
 ### Via terminal (qualquer pasta)
 

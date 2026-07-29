@@ -1,0 +1,24 @@
+<Project>
+
+  <!-- Inherit everything from the repository root, then relax what only makes sense for shipped APIs. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!--
+      CA1707 forbids underscores in member names. That rule targets public API surface;
+      underscore-separated test names are the established convention in .NET testing and
+      are what makes a failing test readable in CI output.
+    -->
+    <!--
+      CA1001/CA1844 fire on the hand-written stream doubles used to exercise the protocol
+      artifact. They are test scaffolding, not shipped types.
+    -->
+    <NoWarn>$(NoWarn);CA1707;CA1001;CA1844</NoWarn>
+  </PropertyGroup>
+
+</Project>

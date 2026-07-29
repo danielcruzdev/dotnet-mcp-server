@@ -2,7 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/DotNetMcpServer.Agent/DotNetMcpServer.Agent.csproj" />
     <Project Path="src/DotNetMcpServer.Server/DotNetMcpServer.Server.csproj" />
-    <Project Path="src/DotNetMcpServer.Shared/DotNetMcpServer.Shared.csproj" />
+    <Project Path="src/Mcp.Protocol.Handwritten/Mcp.Protocol.Handwritten.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DotNetMcpServer.Tests/DotNetMcpServer.Tests.csproj" />
