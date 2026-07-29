@@ -20,7 +20,8 @@ one left ⬜, because it removes the reason to look again.
 3. **Implement**, honouring the acceptance criteria in the phase's **Done when** block.
 4. **Verify.** Build clean, tests green. For anything touching the protocol or a tool,
    **REQUIRED:** use the `verify-mcp-server` skill.
-5. **Commit** with the task id as prefix: `F1-10: replace Content-Length framing with NDJSON`.
+5. **Commit.** Conventional subject, task ids named in the body (`Closes F1-10`) — use the
+   `writing-commits` skill.
 6. **Update the tracker** — see below.
 
 ## Updating the tracker

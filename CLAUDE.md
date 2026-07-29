@@ -64,8 +64,9 @@ tests/DotNetMcpServer.Tests/      Tools (unit) · Protocol (artifact) · Integra
 ## Working the roadmap
 
 `.specs/PRD.md` holds the reasoning, `.specs/PROGRESSO.md` holds the state. Task ids (`F1-10`,
-`F5-07`) prefix commits. Mark a task ✅ only after verification, never at "it compiles", and
-record regressions honestly — a tracker that only improves is one nobody trusts.
+`F5-07`) are named in commit bodies, not subjects — see the `writing-commits` skill. Mark a
+task ✅ only after verification, never at "it compiles", and record regressions honestly — a
+tracker that only improves is one nobody trusts.
 
 Deviations from the PRD go in the decision log with their reason, including dropped tasks. That
 file is the project's main portfolio artifact after the code. Use the `roadmap-task` skill.

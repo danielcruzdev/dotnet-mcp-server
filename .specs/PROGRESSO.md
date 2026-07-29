@@ -1,6 +1,6 @@
 # Execution Tracker — DotNetMcpServer
 
-> Companion to [`PRD.md`](PRD.md) v2.0. Task IDs match one-to-one; use them as commit prefixes.
+> Companion to [`PRD.md`](PRD.md) v2.0. Task IDs match one-to-one and are named in commit bodies.
 > **Last updated:** 2026-07-28
 
 ---
@@ -347,6 +347,6 @@ Record every deviation from the PRD here, with the reason. This is the file that
 ## How to use this file
 
 1. Set the task to 🟦 when you start it, ✅ when it is **verified** — not when the code compiles.
-2. Prefix commits with the task ID: `F1-07: migrate server to the official ModelContextProtocol SDK`.
+2. Commit with a conventional subject and name the task ids in the body (`Closes F1-07`). The `writing-commits` skill holds the format.
 3. When a phase closes, tick its **Done when** boxes, update the progress bars and the metrics table, and move the **Current status** header to the next phase.
 4. Any departure from the PRD goes in the decision log with its reason — including tasks you drop. A dropped task with a recorded rationale reads as judgement; a silently missing one reads as an unfinished project.
