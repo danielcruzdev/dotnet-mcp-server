@@ -10,10 +10,10 @@
 **Phase 1 — SDK Migration & Foundation** ✅ complete · **Phase 2 — Modern .NET Architecture** 🟦 in progress
 
 ```
-Overall   █████░░░░░░░░░░░░░░░  20 / 80 tasks   (25%)
+Overall   █████░░░░░░░░░░░░░░░  21 / 80 tasks   (26%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
-Phase 2   █████████████░░░░░░░   6 / 9   🟦
+Phase 2   ████████████████░░░░   7 / 9   🟦
 Phase 3   ░░░░░░░░░░░░░░░░░░░░   0 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
@@ -22,9 +22,10 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 2 — `F2-07`, degrade gracefully at the tool-iteration limit.
-`InteractiveAgentRunner.CompleteTurnAsync` throws today, which `AgentHostedService` turns into
-a failed session and exit code 1 — one stubborn turn ends the conversation.
+**Next action:** Phase 2 — `F2-09`, the English sweep across the rest of `src/`, then `F2-08`,
+which is what closes the phase. `F2-08` now needs measurement more than it needs tests: the
+`AgentTurnTests` harness landed with `F2-07`, so the missing piece is coverage collection and
+whatever it shows to be uncovered.
 
 **Phase 1 outcome:** both servers are driven end to end by the **official SDK client** as real
 subprocesses — 13 integration tests. The hand-written artifact interoperates with an
@@ -100,7 +101,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ✅ | **F2-04** | `IHttpClientFactory` + resilience: retry, backoff, timeout, circuit breaker, 429 | A8 |
 | ✅ | **F2-05** | Move directory creation out of `AppendStudyNoteTool`'s constructor | B6 |
 | ✅ | **F2-06** | Make console input cancellable (Ctrl+C works) | A9 |
-| ⬜ | **F2-07** | Degrade gracefully at the tool-iteration limit | A10 |
+| ✅ | **F2-07** | Degrade gracefully at the tool-iteration limit | A10 |
 | 🟦 | **F2-08** | Reference and test the Agent project | A5 |
 | 🟦 | **F2-09** | Migrate all comments, messages, and logs to English | D3 |
 
@@ -118,10 +119,12 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 - [ ] No Portuguese strings remain in `src/`
 
 **Partial progress — recorded rather than claimed:**
-- `F2-08` is 🟦, not ✅. The test project now references the Agent project, which closes the
-  structural half of A5, and 10 tests cover configuration binding, validation and path
-  derivation. `InteractiveAgentRunner`, `OpenAiChatClient` and `AgentHostedService` are still
-  uncovered, and the `ScenarioTests` coverage owed since Phase 1 has not been rebuilt.
+- `F2-08` is 🟦, not ✅. The test project references the Agent project, and 20 tests now cover
+  configuration binding and validation, path derivation, the HTTP resilience pipeline, the
+  cancellable console read, and the turn loop against a real server. `AgentHostedService` is
+  still uncovered — it owns process lifetime, which is awkward to drive in-process — and line
+  coverage has never been measured, so the phase's ≥ 60% criterion is unproven either way.
+  Measuring it is what is left.
 - `F2-05` closed against a finding that had already half-expired. B6 described a
   `Directory.CreateDirectory` call in `AppendStudyNoteTool`'s **constructor** — but Phase 1
   deleted that class along with the `IMcpTool` abstraction, so by the time the task came up
@@ -308,7 +311,7 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
 | MCP capabilities served | tools only | tools only | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 4 | 12+ |
-| Test cases | 69 | 77 ⚠️ | 200+ |
+| Test cases | 69 | 80 | 200+ |
 | Integration tests (real client ↔ real server) | 0 | **13** | grows with each phase |
 | Line coverage | not measured | not measured | ≥ 80% |
 | Projects under test | 2 / 3 | **4 / 4** | all |
@@ -317,11 +320,12 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | ADRs published | 0 | **1** | 4+ |
 | Transports | 1 (non-compliant) | 1 (spec-compliant, both servers) | 2 (stdio + HTTP) |
 
-> ⚠️ **The count is back above baseline, 69 → 72, but not by rebuilding what was lost.** Deleting
-> `ScenarioTests` in Phase 1 removed 18 in-process cases that exercised the old `IMcpTool` abstraction;
-> Phase 2 has since added 14 covering the agent's configuration surface and its HTTP resilience pipeline.
-> That is *different* coverage — no multi-tool scenario coverage exists yet, and it remains owed
-> against `F2-08`. Reading the raw number as recovery would be wrong.
+> **The scenario coverage owed since Phase 1 is rebuilt, on better ground than it stood on before.**
+> Deleting `ScenarioTests` removed 18 in-process cases against the old `IMcpTool` abstraction. The
+> replacement is `AgentTurnTests`: the agent's real turn loop, driving real tools on a real server
+> subprocess, with only the model stubbed. Three cases rather than eighteen, but they cross the
+> process boundary the old ones never touched. Line coverage is still unmeasured — that is what
+> `F2-08` has left.
 
 ---
 
@@ -379,6 +383,9 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-08-02 | **A hot loop on stdin EOF was fixed alongside `F2-06`, outside the task** | `Console.ReadLine()` returns `null` at end of input, and the loop treated that like an empty line and `continue`d. Measured on the committed build: one core saturated and 433 KB of `You > ` prompts written to stdout in five seconds. It lives in the exact loop `F2-06` rewrites, so leaving it would have meant shipping a known spin through the lines being changed. End of input now breaks the loop like `exit` does. |
 | 2026-08-02 | Agent shutdown takes ~5 s, cause not identified — recorded rather than guessed at | Measured identically before (5.11 s) and after (5.08 s) `F2-06`, so it is not a regression from that work. Ruled out: the server, which exits on stdin EOF in 0.32 s. Not chased further because it is outside the task and costs nothing but patience at the prompt. Whoever touches agent shutdown next should start here. |
 | 2026-08-02 | `IUserInput` introduced as a one-method seam rather than reading the console inline | Two concrete reasons, neither speculative: the cancellable-read behaviour needs a test with a reader that genuinely blocks, and `F2-08` owes coverage of `InteractiveAgentRunner`, which cannot be driven at all while it calls `Console.ReadLine` directly. The implementation is two lines — `Task.Run` for the read, `WaitAsync` for the cancellation. |
+| 2026-08-02 | The agent's turn loop is tested against a **real** MCP server, not a faked client | `McpClient` is abstract with non-virtual methods and an `[Experimental]` constructor, so a test double is not available without suppressing a diagnostic that `TreatWarningsAsErrors` turns into a build failure. Rather than fight that, `AgentTurnTests` stubs only the model — over the same `HttpMessageHandler` seam `F2-04` established — and lets the tool calls really execute against the server subprocess. The constraint produced a better test than the one originally intended. |
+| 2026-08-02 | `InternalsVisibleTo` added to the Agent project instead of widening its public API | `CompleteTurnAsync` needs to be reachable from a test, and it is not something a consumer should call. One MSBuild item is cheaper than a public method that exists only for testing, and it is what makes the `F2-08` coverage work possible without further surface changes. |
+| 2026-08-02 | The exhausted-turn answer is the model's own narration plus a notice — no extra model call | The alternative was one final completion with tools disabled, forcing an answer. That reads better but adds an API call, a failure mode, and a second timeout to the unhappy path. The narration the model already produced is a real partial answer and costs nothing. Revisit if it proves too thin in use. |
 | 2026-08-02 | A test asserting that a missing `openAI:model` fails validation was wrong and was rewritten | `Model` has a default of `gpt-4o-mini`, so `[Required]` is satisfied and no failure occurs. Unlike `ApiKey`, which has no default, a missing model is not a configuration error. The test now pins the fallback instead. Recorded because the failure came from the test's premise, not the code. |
 
 ---

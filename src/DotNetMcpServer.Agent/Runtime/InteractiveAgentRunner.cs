@@ -79,8 +79,12 @@ public sealed partial class InteractiveAgentRunner
         }
     }
 
-    private async Task<string> CompleteTurnAsync(McpClient mcpClient, List<JsonObject> messages, IList<McpClientTool> tools, CancellationToken cancellationToken)
+    internal async Task<string> CompleteTurnAsync(McpClient mcpClient, List<JsonObject> messages, IList<McpClientTool> tools, CancellationToken cancellationToken)
     {
+        // Whatever the model says while it is still calling tools. If it never reaches a final
+        // answer, this narration is the partial answer the user gets.
+        var narration = new List<string>();
+
         for (var iteration = 0; iteration < _runtimeSettings.MaxToolIterations; iteration++)
         {
             var assistantTurn = await _openAiClient.CompleteAsync(messages, tools, cancellationToken);
@@ -93,6 +97,11 @@ public sealed partial class InteractiveAgentRunner
 
                 messages.Add(ChatMessageFactory.Assistant(content));
                 return content;
+            }
+
+            if (!string.IsNullOrWhiteSpace(assistantTurn.Content))
+            {
+                narration.Add(assistantTurn.Content.Trim());
             }
 
             messages.Add(ChatMessageFactory.AssistantWithToolCalls(assistantTurn));
@@ -109,12 +118,42 @@ public sealed partial class InteractiveAgentRunner
             }
         }
 
-        // Degrading to a partial answer instead of throwing is F2-07.
-        throw new InvalidOperationException("Reached the tool-calling iteration limit without a final answer.");
+        LogIterationLimitReached(_runtimeSettings.MaxToolIterations);
+
+        // The limit is a budget, not a failure. Throwing here ended the whole session over one
+        // stubborn turn — the user lost the conversation because the model would not stop
+        // calling tools. The history stays intact, so the next turn can carry on.
+        var partial = FormatExhaustedTurn(narration, _runtimeSettings.MaxToolIterations);
+        messages.Add(ChatMessageFactory.Assistant(partial));
+
+        return partial;
+    }
+
+    /// <summary>
+    /// Renders the answer given when the tool budget runs out. Separated from the loop so the
+    /// wording can be asserted without driving a whole conversation.
+    /// </summary>
+    internal static string FormatExhaustedTurn(IReadOnlyList<string> narration, int maxToolIterations)
+    {
+        var notice =
+            $"(Stopped after {maxToolIterations} rounds of tool calls without reaching a final answer. " +
+            "Ask again, or narrow the question.)";
+
+        if (narration.Count == 0)
+        {
+            return notice;
+        }
+
+        return string.Join(Environment.NewLine, narration) + Environment.NewLine + Environment.NewLine + notice;
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Executing tool {ToolName}")]
     private partial void LogExecutingTool(string toolName);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The turn used all {MaxToolIterations} tool-calling rounds; returning a partial answer")]
+    private partial void LogIterationLimitReached(int maxToolIterations);
 
     private static string BuildToolContent(CallToolResult result)
     {
