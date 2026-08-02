@@ -64,4 +64,21 @@ public sealed class WorkspaceContext
 
         return combined;
     }
+
+    /// <summary>
+    /// Resolves a workspace-relative directory, creating it if it does not exist.
+    /// </summary>
+    /// <remarks>
+    /// The creation lives here, behind the containment guard, rather than in the tool that
+    /// happens to need it — so a directory can only ever be created inside the workspace, and
+    /// an unwritable root fails on the call that needed it rather than at wiring time.
+    /// </remarks>
+    /// <exception cref="UnauthorizedAccessException">The path resolves outside the workspace.</exception>
+    public string EnsureDirectory(string relativePath)
+    {
+        var absolutePath = ResolvePath(relativePath);
+        Directory.CreateDirectory(absolutePath);
+
+        return absolutePath;
+    }
 }

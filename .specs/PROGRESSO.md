@@ -10,10 +10,10 @@
 **Phase 1 — SDK Migration & Foundation** ✅ complete · **Phase 2 — Modern .NET Architecture** 🟦 in progress
 
 ```
-Overall   ████░░░░░░░░░░░░░░░░  18 / 80 tasks   (22%)
+Overall   ████░░░░░░░░░░░░░░░░  19 / 80 tasks   (23%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
-Phase 2   █████████░░░░░░░░░░░   4 / 9   🟦
+Phase 2   ███████████░░░░░░░░░   5 / 9   🟦
 Phase 3   ░░░░░░░░░░░░░░░░░░░░   0 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
@@ -22,9 +22,9 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 2 — `F2-05`, move directory creation out of the study-note tool's
-constructor into an injected workspace service. `WorkspaceContext` already exists on the server
-side, so this is about where the side effect happens, not about new infrastructure.
+**Next action:** Phase 2 — `F2-06`, make console input cancellable so Ctrl+C interrupts
+cleanly. `AgentHostedService.StopAsync` already carries a comment describing why it cannot
+await the session today; that comment is the specification.
 
 **Phase 1 outcome:** both servers are driven end to end by the **official SDK client** as real
 subprocesses — 13 integration tests. The hand-written artifact interoperates with an
@@ -98,7 +98,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ✅ | **F2-02** | `IOptions<T>` + `ValidateDataAnnotations().ValidateOnStart()` | A6 |
 | ✅ | **F2-03** | Structured `ILogger` — server logs to stderr only | A6, C5 |
 | ✅ | **F2-04** | `IHttpClientFactory` + resilience: retry, backoff, timeout, circuit breaker, 429 | A8 |
-| ⬜ | **F2-05** | Move directory creation out of `AppendStudyNoteTool`'s constructor | B6 |
+| ✅ | **F2-05** | Move directory creation out of `AppendStudyNoteTool`'s constructor | B6 |
 | ⬜ | **F2-06** | Make console input cancellable (Ctrl+C works) | A9 |
 | ⬜ | **F2-07** | Degrade gracefully at the tool-iteration limit | A10 |
 | 🟦 | **F2-08** | Reference and test the Agent project | A5 |
@@ -122,6 +122,12 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
   structural half of A5, and 10 tests cover configuration binding, validation and path
   derivation. `InteractiveAgentRunner`, `OpenAiChatClient` and `AgentHostedService` are still
   uncovered, and the `ScenarioTests` coverage owed since Phase 1 has not been rebuilt.
+- `F2-05` closed against a finding that had already half-expired. B6 described a
+  `Directory.CreateDirectory` call in `AppendStudyNoteTool`'s **constructor** — but Phase 1
+  deleted that class along with the `IMcpTool` abstraction, so by the time the task came up
+  the side effect was already at call time. What was left was the second half of the task's
+  wording, moving the creation into the injected workspace service, which is done. Recorded
+  because "✅" here means less than the finding text implies.
 - `F2-09` is 🟦. Portuguese was migrated in the files this change touched
   (`InteractiveAgentRunner`, `OpenAiChatClient`, `.env.example`). A sweep of the rest of `src/`
   has not been done.
@@ -302,7 +308,7 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
 | MCP capabilities served | tools only | tools only | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 4 | 12+ |
-| Test cases | 69 | 72 ⚠️ | 200+ |
+| Test cases | 69 | 74 ⚠️ | 200+ |
 | Integration tests (real client ↔ real server) | 0 | **13** | grows with each phase |
 | Line coverage | not measured | not measured | ≥ 80% |
 | Projects under test | 2 / 3 | **4 / 4** | all |
@@ -368,6 +374,7 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-08-02 | The circuit breaker's default threshold is unreachable for this agent, so it was lowered | 100 requests per sampling window with a 10% failure ratio describes a service under load, not a single-user console session — the breaker would never have opened, making it decoration. Set to 4 requests at a 50% ratio: high enough that one blip does not trip it, low enough that a sustained outage fails fast. |
 | 2026-08-02 | `HttpClient.Timeout` set to `Timeout.InfiniteTimeSpan` on the typed client | `HttpClient.Timeout` sits above the handler chain and bounds the *entire* send, retries included. Left at its 100 s default it would have silently capped the 300 s total-request policy and cancelled retries mid-flight. The resilience pipeline owns every timeout, or none of them. |
 | 2026-08-02 | Runtime extension packages moved 10.0.0 → 10.0.10, forced by the resilience package | `Microsoft.Extensions.Http.Resilience` ships from dotnet/extensions on its own version train (10.8.0) and requires `Microsoft.Extensions.Http` ≥ 10.0.10; the 10.0.0 pin produced NU1605, which is an error here. `Hosting` and `Options.DataAnnotations` were moved with it to keep the servicing train consistent rather than leaving one package ahead. |
+| 2026-08-02 | **B6 was already half-fixed by the Phase 1 migration; `F2-05` closed the rest** | The finding named a `Directory.CreateDirectory` call in `AppendStudyNoteTool`'s constructor. That class no longer exists — Phase 1 replaced it with a static `[McpServerTool]` method — so the constructor side effect went away with the constructor. The remaining half was real: the tool still called `Directory.CreateDirectory` itself, one step outside the containment guard. It moved to `WorkspaceContext.EnsureDirectory`, so a directory can only be created inside the workspace. Findings written against a pre-migration tree need re-reading before they are worked, not just ticking. |
 | 2026-08-02 | A test asserting that a missing `openAI:model` fails validation was wrong and was rewritten | `Model` has a default of `gpt-4o-mini`, so `[Required]` is satisfied and no failure occurs. Unlike `ApiKey`, which has no default, a missing model is not a configuration error. The test now pins the fallback instead. Recorded because the failure came from the test's premise, not the code. |
 
 ---

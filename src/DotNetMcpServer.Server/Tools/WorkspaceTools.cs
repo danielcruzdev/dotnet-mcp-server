@@ -76,9 +76,7 @@ public static class WorkspaceTools
             throw new McpException("'note' is required.");
         }
 
-        var notesDirectory = workspace.ResolvePath("notes");
-        Directory.CreateDirectory(notesDirectory);
-
+        var notesDirectory = workspace.EnsureDirectory("notes");
         var notesFile = Path.Combine(notesDirectory, "study-notes.md");
         var entry = FormatEntry(title, note, DateTimeOffset.Now);
 
