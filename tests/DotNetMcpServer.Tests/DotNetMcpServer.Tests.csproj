@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Mcp.Protocol.Handwritten\Mcp.Protocol.Handwritten.csproj" />
     <ProjectReference Include="..\..\src\DotNetMcpServer.Server\DotNetMcpServer.Server.csproj" />
+    <ProjectReference Include="..\..\src\DotNetMcpServer.Agent\DotNetMcpServer.Agent.csproj" />
   </ItemGroup>
 
 </Project>

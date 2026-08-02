@@ -2,36 +2,49 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using DotNetMcpServer.Agent.Config;
 using DotNetMcpServer.Agent.Llm;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using DotNetMcpServer.Agent.Json;
 
 namespace DotNetMcpServer.Agent.Runtime;
 
-public sealed class InteractiveAgentRunner
+public sealed partial class InteractiveAgentRunner
 {
     private readonly AgentRuntimeSettings _runtimeSettings;
     private readonly OpenAiChatClient _openAiClient;
-    private readonly McpClient _mcpClient;
+    private readonly ILogger<InteractiveAgentRunner> _logger;
 
-    public InteractiveAgentRunner(AgentRuntimeSettings runtimeSettings, OpenAiChatClient openAiClient, McpClient mcpClient)
+    public InteractiveAgentRunner(
+        IOptions<AgentRuntimeSettings> runtimeSettings,
+        OpenAiChatClient openAiClient,
+        ILogger<InteractiveAgentRunner> logger)
     {
-        _runtimeSettings = runtimeSettings;
+        _runtimeSettings = runtimeSettings.Value;
         _openAiClient = openAiClient;
-        _mcpClient = mcpClient;
+        _logger = logger;
     }
 
-    public async Task RunAsync(CancellationToken cancellationToken)
+    /// <remarks>
+    /// <see cref="Console"/> here is the conversation with the user, not logging. Diagnostics
+    /// go through <see cref="ILogger"/>. The agent may use stdout freely — the stdout
+    /// restriction belongs to the MCP server, where stdout is the protocol channel.
+    /// </remarks>
+    public async Task RunAsync(McpClient mcpClient, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(mcpClient);
+
         Console.WriteLine("DotNetMcpServer AI Agent + MCP");
-        Console.WriteLine("Digite sua pergunta. Use 'exit' para encerrar.");
+        Console.WriteLine("Type your question. Use 'exit' to quit.");
         Console.WriteLine();
 
-        var tools = await _mcpClient.ListToolsAsync(cancellationToken: cancellationToken);
-        Console.WriteLine($"Ferramentas MCP carregadas: {string.Join(", ", tools.Select(tool => tool.Name))}");
+        var tools = await mcpClient.ListToolsAsync(cancellationToken: cancellationToken);
+        Console.WriteLine($"MCP tools loaded: {string.Join(", ", tools.Select(tool => tool.Name))}");
         Console.WriteLine();
 
-        // TODO: Implementar context windowing — o histórico cresce indefinidamente e pode exceder o limite de tokens do modelo.
+        // TODO: Implement context windowing — history grows without bound and will exceed the
+        // model's token limit in a long session. Tracked as F6-04.
         var messages = new List<JsonObject>
         {
             ChatMessageFactory.System(_runtimeSettings.SystemPrompt)
@@ -39,7 +52,7 @@ public sealed class InteractiveAgentRunner
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            Console.Write("Você > ");
+            Console.Write("You > ");
             var userInput = Console.ReadLine();
             if (string.IsNullOrWhiteSpace(userInput))
             {
@@ -53,14 +66,14 @@ public sealed class InteractiveAgentRunner
 
             messages.Add(ChatMessageFactory.User(userInput));
 
-            var assistantReply = await CompleteTurnAsync(messages, tools, cancellationToken);
+            var assistantReply = await CompleteTurnAsync(mcpClient, messages, tools, cancellationToken);
             Console.WriteLine();
-            Console.WriteLine($"Agente > {assistantReply}");
+            Console.WriteLine($"Agent > {assistantReply}");
             Console.WriteLine();
         }
     }
 
-    private async Task<string> CompleteTurnAsync(List<JsonObject> messages, IList<McpClientTool> tools, CancellationToken cancellationToken)
+    private async Task<string> CompleteTurnAsync(McpClient mcpClient, List<JsonObject> messages, IList<McpClientTool> tools, CancellationToken cancellationToken)
     {
         for (var iteration = 0; iteration < _runtimeSettings.MaxToolIterations; iteration++)
         {
@@ -69,7 +82,7 @@ public sealed class InteractiveAgentRunner
             if (assistantTurn.ToolCalls.Count == 0)
             {
                 var content = string.IsNullOrWhiteSpace(assistantTurn.Content)
-                    ? "(Sem conteúdo retornado pelo modelo.)"
+                    ? "(The model returned no content.)"
                     : assistantTurn.Content;
 
                 messages.Add(ChatMessageFactory.Assistant(content));
@@ -80,18 +93,22 @@ public sealed class InteractiveAgentRunner
 
             foreach (var toolCall in assistantTurn.ToolCalls)
             {
-                Console.WriteLine($"[tool] Executando {toolCall.Name}...");
+                LogExecutingTool(toolCall.Name);
                 var arguments = toolCall.Arguments.ToDictionary(
                     argument => argument.Key,
                     argument => (object?)argument.Value);
-                var result = await _mcpClient.CallToolAsync(toolCall.Name, arguments, cancellationToken: cancellationToken);
+                var result = await mcpClient.CallToolAsync(toolCall.Name, arguments, cancellationToken: cancellationToken);
                 var toolText = BuildToolContent(result);
                 messages.Add(ChatMessageFactory.Tool(toolCall.Id, toolCall.Name, toolText));
             }
         }
 
-        throw new InvalidOperationException("Limite de iterações de tool-calling atingido sem resposta final.");
+        // Degrading to a partial answer instead of throwing is F2-07.
+        throw new InvalidOperationException("Reached the tool-calling iteration limit without a final answer.");
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Executing tool {ToolName}")]
+    private partial void LogExecutingTool(string toolName);
 
     private static string BuildToolContent(CallToolResult result)
     {
@@ -103,7 +120,7 @@ public sealed class InteractiveAgentRunner
 
         if (string.IsNullOrWhiteSpace(content))
         {
-            content = "(Tool sem retorno textual.)";
+            content = "(The tool returned no text.)";
         }
 
         if (result.IsError == true)

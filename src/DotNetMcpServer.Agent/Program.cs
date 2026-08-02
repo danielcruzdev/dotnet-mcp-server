@@ -1,69 +1,31 @@
 using DotNetMcpServer.Agent.Config;
 using DotNetMcpServer.Agent.Llm;
 using DotNetMcpServer.Agent.Runtime;
-using ModelContextProtocol.Client;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
-namespace DotNetMcpServer.Agent;
-
-internal static class Program
+// The content root is the binary's own folder rather than the process working directory,
+// so appsettings.json is found however the agent is launched.
+var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 {
-    public static async Task Main(string[] args)
-    {
-        using var cancellationTokenSource = new CancellationTokenSource();
-        Console.CancelKeyPress += (_, eventArgs) =>
-        {
-            eventArgs.Cancel = true;
-            cancellationTokenSource.Cancel();
-        };
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory
+});
 
-        try
-        {
-            var settings = AgentSettingsLoader.Load(AppContext.BaseDirectory, Directory.GetCurrentDirectory());
-            ValidateConfiguration(settings);
+// Added last so the documented flat variables (OPENAI_API_KEY and friends) win over
+// appsettings.json.
+builder.Configuration.AddInMemoryCollection(FlatEnvironmentVariables.ReadProcessEnvironment());
 
-            using var httpClient = new HttpClient();
-            var openAiClient = new OpenAiChatClient(httpClient, settings.OpenAI);
+builder.Services.AddAgentOptions(builder.Configuration);
+builder.Services.AddSingleton<IPostConfigureOptions<McpSettings>>(
+    _ => new McpSettingsSetup(AppContext.BaseDirectory, Directory.GetCurrentDirectory()));
 
-            // The server is launched as a compiled binary, never through `dotnet run`:
-            // MSBuild writes to stdout, and stdout is the protocol channel.
-            var transport = new StdioClientTransport(new StdioClientTransportOptions
-            {
-                Name = "dotnet-mcp-server",
-                Command = settings.Mcp.Command,
-                Arguments = settings.Mcp.ArgumentList,
-                WorkingDirectory = settings.Mcp.WorkingDirectory,
-                EnvironmentVariables = new Dictionary<string, string?>
-                {
-                    ["MCP_WORKSPACE_ROOT"] = settings.Mcp.WorkspaceRoot
-                }
-            });
+// Resilience policies land in F2-04; this replaces the raw `new HttpClient()`.
+builder.Services.AddHttpClient<OpenAiChatClient>();
 
-            await using var mcpClient = await McpClient.CreateAsync(transport, cancellationToken: cancellationTokenSource.Token);
-            var runner = new InteractiveAgentRunner(settings.Runtime, openAiClient, mcpClient);
+builder.Services.AddSingleton<InteractiveAgentRunner>();
+builder.Services.AddHostedService<AgentHostedService>();
 
-            await runner.RunAsync(cancellationTokenSource.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            Console.WriteLine("Shutting down agent...");
-        }
-        catch (Exception exception)
-        {
-            Console.Error.WriteLine($"Fatal error: {exception.Message}");
-            Environment.ExitCode = 1;
-        }
-    }
-
-    private static void ValidateConfiguration(AgentSettings settings)
-    {
-        if (string.IsNullOrWhiteSpace(settings.OpenAI.ApiKey))
-        {
-            throw new InvalidOperationException("OPENAI_API_KEY is not set. Configure it in the environment.");
-        }
-
-        if (string.IsNullOrWhiteSpace(settings.OpenAI.Model))
-        {
-            throw new InvalidOperationException("No OpenAI model configured.");
-        }
-    }
-}
+await builder.Build().RunAsync();

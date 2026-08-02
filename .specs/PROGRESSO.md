@@ -7,13 +7,13 @@
 
 ## Current status
 
-**Phase 1 — SDK Migration & Foundation** ✅ complete · **Phase 2 — Modern .NET Architecture** is next
+**Phase 1 — SDK Migration & Foundation** ✅ complete · **Phase 2 — Modern .NET Architecture** 🟦 in progress
 
 ```
-Overall   ███░░░░░░░░░░░░░░░░░  14 / 80 tasks   (18%)
+Overall   ████░░░░░░░░░░░░░░░░  17 / 80 tasks   (21%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
-Phase 2   ░░░░░░░░░░░░░░░░░░░░   0 / 9
+Phase 2   ███████░░░░░░░░░░░░░   3 / 9   🟦
 Phase 3   ░░░░░░░░░░░░░░░░░░░░   0 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
@@ -22,8 +22,9 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 2 — `F2-01`, adopt the Generic Host in the agent. The server already
-has one via the SDK; the agent is where the remaining architecture findings live.
+**Next action:** Phase 2 — `F2-04`, `IHttpClientFactory` with resilience. The typed client is
+already registered, so this adds the policies and the stub-handler test that proves a 429 is
+retried.
 
 **Phase 1 outcome:** both servers are driven end to end by the **official SDK client** as real
 subprocesses — 13 integration tests. The hand-written artifact interoperates with an
@@ -93,22 +94,35 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 
 | | ID | Task | Fixes |
 |:---:|---|---|---|
-| ⬜ | **F2-01** | Adopt the Generic Host in the agent, matching the server's SDK-provided host | A6 |
-| ⬜ | **F2-02** | `IOptions<T>` + `ValidateDataAnnotations().ValidateOnStart()` | A6 |
-| ⬜ | **F2-03** | Structured `ILogger` — server logs to stderr only | A6, C5 |
+| ✅ | **F2-01** | Adopt the Generic Host in the agent, matching the server's SDK-provided host | A6 |
+| ✅ | **F2-02** | `IOptions<T>` + `ValidateDataAnnotations().ValidateOnStart()` | A6 |
+| ✅ | **F2-03** | Structured `ILogger` — server logs to stderr only | A6, C5 |
 | ⬜ | **F2-04** | `IHttpClientFactory` + resilience: retry, backoff, timeout, circuit breaker, 429 | A8 |
 | ⬜ | **F2-05** | Move directory creation out of `AppendStudyNoteTool`'s constructor | B6 |
 | ⬜ | **F2-06** | Make console input cancellable (Ctrl+C works) | A9 |
 | ⬜ | **F2-07** | Degrade gracefully at the tool-iteration limit | A10 |
-| ⬜ | **F2-08** | Reference and test the Agent project | A5 |
-| ⬜ | **F2-09** | Migrate all comments, messages, and logs to English | D3 |
+| 🟦 | **F2-08** | Reference and test the Agent project | A5 |
+| 🟦 | **F2-09** | Migrate all comments, messages, and logs to English | D3 |
 
 **Done when**
-- [ ] No `new` on a service type in either entry point
-- [ ] A missing `OPENAI_API_KEY` fails at startup with a clear message
+- [x] No `new` on a service type in either entry point — the agent's `Program.cs` is a host
+      builder; `HttpClient`, the chat client, the runner and the MCP connection all come from DI
+- [ ] A missing `OPENAI_API_KEY` fails at startup with a clear message — **done**, verified by
+      running the binary with the variable unset: `DataAnnotation validation failed for
+      'OpenAiSettings' members: 'ApiKey'`. Left unticked because the box is Phase 2's, and
+      `F2-04`'s criterion below is still open
 - [ ] A transient HTTP 429 is retried transparently, proven by a stub-handler test
 - [ ] Coverage ≥ 60% with every project reporting
 - [ ] No Portuguese strings remain in `src/`
+
+**Partial progress — recorded rather than claimed:**
+- `F2-08` is 🟦, not ✅. The test project now references the Agent project, which closes the
+  structural half of A5, and 10 tests cover configuration binding, validation and path
+  derivation. `InteractiveAgentRunner`, `OpenAiChatClient` and `AgentHostedService` are still
+  uncovered, and the `ScenarioTests` coverage owed since Phase 1 has not been rebuilt.
+- `F2-09` is 🟦. Portuguese was migrated in the files this change touched
+  (`InteractiveAgentRunner`, `OpenAiChatClient`, `.env.example`). A sweep of the rest of `src/`
+  has not been done.
 
 ---
 
@@ -286,19 +300,19 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
 | MCP capabilities served | tools only | tools only | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 4 | 12+ |
-| Test cases | 69 | 58 ⚠️ | 200+ |
+| Test cases | 69 | 68 ⚠️ | 200+ |
 | Integration tests (real client ↔ real server) | 0 | **13** | grows with each phase |
 | Line coverage | not measured | not measured | ≥ 80% |
-| Projects under test | 2 / 3 | 3 / 4 | all |
+| Projects under test | 2 / 3 | **4 / 4** | all |
 | Build warnings | not enforced | **0, enforced** | 0, enforced |
 | CI platforms | 1 | 1 | 3 |
 | ADRs published | 0 | **1** | 4+ |
 | Transports | 1 (non-compliant) | 1 (spec-compliant, both servers) | 2 (stdio + HTTP) |
 
-> ⚠️ **Test count is still below baseline, 69 → 58.** Deleting `ScenarioTests` removed 18 in-process cases that
-> exercised the old `IMcpTool` abstraction. What replaced them is stronger per test — six of the
-> new ones drive a real server process through the real protocol — but the raw count is a
-> regression and rebuilding that scenario coverage is owed work, not a rounding error.
+> ⚠️ **Test count is still below baseline, 69 → 68.** Deleting `ScenarioTests` in Phase 1 removed 18 in-process
+> cases that exercised the old `IMcpTool` abstraction; Phase 2 has since added 10 covering the agent's
+> configuration surface. The gap is nearly closed, but it closed by adding *different* coverage, not by
+> rebuilding what was lost — no multi-tool scenario coverage exists yet. That remains owed against `F2-08`.
 
 ---
 
@@ -341,6 +355,13 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-07-28 | Deleting `DotNetMcpServer.sln` would have silently broken the agent | `AgentSettingsLoader.FindRepositoryRoot` searched for `*.sln` specifically — removing the file reintroduces the exact bug commit `1b5a8f1` fixed. Root detection now accepts `*.slnx`, `*.sln`, or `.git`. |
 | 2026-07-28 | `InvariantGlobalization` pinned to `false` with a comment explaining why | It was switched on as a reflex during F1-03 and broke `get_current_datetime`: it disables ICU, so IANA ids like `America/Sao_Paulo` stop resolving. The comment exists so nobody re-enables it. |
 | 2026-07-28 | `CallToolResult.IsError` is `bool?`, and `null` means success | Not `false`. Assertions must be `Assert.NotEqual(true, result.IsError)`; `Assert.False` fails against `null`. Worth knowing before writing any further interop test. |
+| 2026-08-02 | **`F2-01`, `F2-02` and `F2-03` landed as one commit, not three** | They are one physical change. Adopting the Generic Host forces a decision on configuration binding and on logging in the same movement; sequencing them would have meant writing wiring that the next task deletes. The commit body names all three ids. |
+| 2026-08-02 | Flat environment variable names kept (`OPENAI_API_KEY`), instead of the framework's `Section__Key` convention | The `__` convention needs no translation layer, but `.env.example` and `docs/INSTALL.md` document the flat names and `OPENAI_API_KEY` is an ecosystem convention rather than something this project invented. `FlatEnvironmentVariables` maps them onto configuration keys — about twenty lines, and the documented contract survives. |
+| 2026-08-02 | **`Math.Clamp` on `MaxToolIterations` replaced by `[Range(1,12)]` — a behaviour change** | An out-of-range value used to be silently corrected into range. Correcting a user's configuration without telling them hides the mistake; it now fails at startup. Observable change: `AGENT_MAX_TOOL_ITERATIONS=99` previously ran with 12 and now refuses to start. |
+| 2026-08-02 | `AgentSettingsLoader` deleted; path derivation moved to `McpSettingsSetup` (`IPostConfigureOptions<McpSettings>`) | `IConfiguration` replaces the JSON loading and environment overrides, but repository-root discovery and server-binary resolution are post-binding derivation, not binding. As an options setup they are constructor-injectable and unit-testable — the logic had no tests at all before. CLAUDE.md, `docs/INSTALL.md` and the `verify-mcp-server` skill named the old symbol and were updated in the same commit. |
+| 2026-08-02 | **`.env.example` reintroduced C5 and was fixed outside its task** | It shipped `MCP_COMMAND=dotnet` and `MCP_ARGUMENTS=run --project …`. `appsettings.json` deliberately leaves both blank so the compiled binary is resolved, but environment variables override the blank — so anyone following the documented example got `dotnet run` back, putting MSBuild output on the protocol channel. Adjacent to `F2-02` rather than part of it, fixed because the file documents the exact mechanism this task rewrote. |
+| 2026-08-02 | Analyzers force `LoggerMessage` source generation, not direct `ILogger` calls | CA1848 and CA1873 are errors under `TreatWarningsAsErrors`. This pushed the logging toward source-generated partial methods, which is the idiomatic form anyway — worth knowing before writing any further logging in this repository. |
+| 2026-08-02 | A test asserting that a missing `openAI:model` fails validation was wrong and was rewritten | `Model` has a default of `gpt-4o-mini`, so `[Required]` is satisfied and no failure occurs. Unlike `ApiKey`, which has no default, a missing model is not a configuration error. The test now pins the fallback instead. Recorded because the failure came from the test's premise, not the code. |
 
 ---
 
