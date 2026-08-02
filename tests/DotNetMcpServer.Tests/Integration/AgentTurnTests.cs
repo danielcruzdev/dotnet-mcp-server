@@ -85,20 +85,7 @@ public sealed class AgentTurnTests : IAsyncLifetime
     private static string FinalAnswer(string content) =>
         $$$"""{"choices":[{"message":{"role":"assistant","content":"{{{content}}}"}}]}""";
 
-    private static ServiceProvider BuildProvider(HttpMessageHandler model)
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddSingleton<IOptions<OpenAiSettings>>(Options.Create(new OpenAiSettings
-        {
-            ApiKey = "sk-test-key",
-            BaseUrl = "https://openai.invalid/v1"
-        }));
-
-        services.AddOpenAiChatClient().ConfigurePrimaryHttpMessageHandler(() => model);
-
-        return services.BuildServiceProvider();
-    }
+    private static ServiceProvider BuildProvider(HttpMessageHandler model) => AgentTestHost.WithModel(model);
 
     private static InteractiveAgentRunner BuildRunner(ServiceProvider provider, int maxToolIterations) =>
         new(

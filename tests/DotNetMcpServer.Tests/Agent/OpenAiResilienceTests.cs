@@ -2,11 +2,9 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
-using DotNetMcpServer.Agent.Config;
 using DotNetMcpServer.Agent.Llm;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
-using Microsoft.Extensions.Options;
 
 namespace DotNetMcpServer.Tests.Agent;
 
@@ -63,20 +61,7 @@ public sealed class OpenAiResilienceTests
             "application/json")
     };
 
-    private static ServiceProvider BuildProvider(HttpMessageHandler transport)
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddSingleton<IOptions<OpenAiSettings>>(Options.Create(new OpenAiSettings
-        {
-            ApiKey = "sk-test-key",
-            BaseUrl = "https://openai.invalid/v1"
-        }));
-
-        services.AddOpenAiChatClient().ConfigurePrimaryHttpMessageHandler(() => transport);
-
-        return services.BuildServiceProvider();
-    }
+    private static ServiceProvider BuildProvider(HttpMessageHandler transport) => AgentTestHost.WithModel(transport);
 
     private static JsonObject UserMessage(string content) => new()
     {

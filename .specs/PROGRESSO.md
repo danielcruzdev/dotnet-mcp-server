@@ -7,13 +7,13 @@
 
 ## Current status
 
-**Phase 1 — SDK Migration & Foundation** ✅ complete · **Phase 2 — Modern .NET Architecture** 🟦 in progress
+**Phase 2 — Modern .NET Architecture** ✅ complete · **Phase 3 — Full MCP Surface via SDK** ⬜ next
 
 ```
-Overall   █████░░░░░░░░░░░░░░░  22 / 80 tasks   (27%)
+Overall   ██████░░░░░░░░░░░░░░  23 / 80 tasks   (29%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
-Phase 2   ██████████████████░░   8 / 9   🟦
+Phase 2   ████████████████████   9 / 9   ✅ complete
 Phase 3   ░░░░░░░░░░░░░░░░░░░░   0 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
@@ -22,10 +22,14 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 2 — `F2-09`, the English sweep across the rest of `src/`, then `F2-08`,
-which is what closes the phase. `F2-08` now needs measurement more than it needs tests: the
-`AgentTurnTests` harness landed with `F2-07`, so the missing piece is coverage collection and
-whatever it shows to be uncovered.
+**Next action:** Phase 3 — `F3-01`, `resources/list` + `resources/read`. `WorkspaceContext`
+already owns path containment and now creates directories behind it, so a resource handler has
+the boundary it needs without adding a second one.
+
+**Phase 2 outcome:** the agent is a hosted, injected, validated, observable application, and
+every project reports coverage — **70.1%**, against a 60% bar. The two findings that mattered
+most were not in the task list: a rate limit used to end the turn, and a closed stdin spun a
+core. Both were found by running the thing rather than by reading it.
 
 **Phase 1 outcome:** both servers are driven end to end by the **official SDK client** as real
 subprocesses — 13 integration tests. The hand-written artifact interoperates with an
@@ -82,7 +86,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
       connect. Owner: Daniel. Blocks nothing; evidence for the `F8-07` demo recording.
 
 **Carried into later phases** — deliberate, not forgotten:
-- `ScenarioTests` (18 cases) and `WorkspaceFixture` were deleted with the `IMcpTool` abstraction they tested. Equivalent multi-tool scenarios must be rebuilt on the interop harness; tracked as part of the Phase 2 coverage work (`F2-08`).
+- ~~`ScenarioTests` (18 cases) and `WorkspaceFixture` were deleted with the `IMcpTool` abstraction they tested.~~ **Settled in Phase 2.** `AgentTurnTests` rebuilt the multi-tool scenarios on the interop harness under `F2-07`, and `F2-08` added the tool-behaviour coverage the old suite never had.
 
 ---
 
@@ -102,7 +106,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ✅ | **F2-05** | Move directory creation out of `AppendStudyNoteTool`'s constructor | B6 |
 | ✅ | **F2-06** | Make console input cancellable (Ctrl+C works) | A9 |
 | ✅ | **F2-07** | Degrade gracefully at the tool-iteration limit | A10 |
-| 🟦 | **F2-08** | Reference and test the Agent project | A5 |
+| ✅ | **F2-08** | Reference and test the Agent project | A5 |
 | ✅ | **F2-09** | Migrate all comments, messages, and logs to English | D3 |
 
 **Done when**
@@ -115,18 +119,20 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
       in `OpenAiResilienceTests` drive the shipped registration with only the transport
       replaced: a 429 then a 200 succeeds in two attempts, a permanent 429 stops at four, and a
       400 is not retried at all
-- [ ] Coverage ≥ 60% with every project reporting
+- [x] Coverage ≥ 60% with every project reporting — **70.1% line, 57.2% branch**. Agent 68.0%,
+      Server 82.2%, artifact 66.9%. Understated: everything the interop suite runs lives in a
+      subprocess the collector does not instrument, so all three `Program` entry points and the
+      artifact's conformance tools read as 0% while being exercised on every run
 - [x] No Portuguese strings remain in `src/` — swept across all 30 tracked files: comments,
       XML docs, exception text, log messages, console output and `appsettings.json`. Also
       clean in `tests/` and `docs/`
 
-**Partial progress — recorded rather than claimed:**
-- `F2-08` is 🟦, not ✅. The test project references the Agent project, and 20 tests now cover
-  configuration binding and validation, path derivation, the HTTP resilience pipeline, the
-  cancellable console read, and the turn loop against a real server. `AgentHostedService` is
-  still uncovered — it owns process lifetime, which is awkward to drive in-process — and line
-  coverage has never been measured, so the phase's ≥ 60% criterion is unproven either way.
-  Measuring it is what is left.
+**What the ✅s do and do not mean:**
+- `F2-08` closed at 70.1%, but read the shape rather than the number. `AgentHostedService` is
+  now driven for real — started against a server subprocess, stopped while its session is
+  parked on input. What stays uncovered in-process is the three `Program` entry points and the
+  artifact's conformance tools, all of which run on every interop test, in another process.
+  The measurement is conservative, not generous.
 - `F2-05` closed against a finding that had already half-expired. B6 described a
   `Directory.CreateDirectory` call in `AppendStudyNoteTool`'s **constructor** — but Phase 1
   deleted that class along with the `IMcpTool` abstraction, so by the time the task came up
@@ -314,9 +320,9 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
 | MCP capabilities served | tools only | tools only | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 4 | 12+ |
-| Test cases | 69 | 80 | 200+ |
-| Integration tests (real client ↔ real server) | 0 | **13** | grows with each phase |
-| Line coverage | not measured | not measured | ≥ 80% |
+| Test cases | 69 | 93 | 200+ |
+| Integration tests (real client ↔ real server) | 0 | **18** | grows with each phase |
+| Line coverage | not measured | **70.1%** (branch 57.2%) | ≥ 80% |
 | Projects under test | 2 / 3 | **4 / 4** | all |
 | Build warnings | not enforced | **0, enforced** | 0, enforced |
 | CI platforms | 1 | 1 | 3 |
@@ -390,6 +396,9 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-08-02 | `InternalsVisibleTo` added to the Agent project instead of widening its public API | `CompleteTurnAsync` needs to be reachable from a test, and it is not something a consumer should call. One MSBuild item is cheaper than a public method that exists only for testing, and it is what makes the `F2-08` coverage work possible without further surface changes. |
 | 2026-08-02 | The exhausted-turn answer is the model's own narration plus a notice — no extra model call | The alternative was one final completion with tools disabled, forcing an answer. That reads better but adds an API call, a failure mode, and a second timeout to the unhappy path. The narration the model already produced is a real partial answer and costs nothing. Revisit if it proves too thin in use. |
 | 2026-08-02 | **`examples/EXAMPLES.md` is still Portuguese and belonged to no task; folded into `F8-06`** | Found by the `F2-09` sweep. `F2-09`'s criterion is `src/`, and D1 hands the README to `F8-06`, but nothing claimed the examples document — it would have shipped in Portuguese next to an English README. It is not translated here because it should be rewritten with the README, in one voice, not patched ahead of it. |
+| 2026-08-02 | **The first coverage run reported 58.5% and the number was wrong** | Stale assemblies from before the project rename — `PortfolioAgent.Tests.dll` and `PortfolioAgent.Shared.dll`, built in March — were still sitting in `bin/` and the collector instrumented them at 0%. Deleting `bin/` and `obj/` and re-measuring gave 60.1% on identical code. Two lessons kept here: coverage was about to be reported 1.6 points low against a 60% bar, and a clean build is part of measuring anything. `F8-04` should clean before collecting in CI. |
+| 2026-08-02 | Line coverage understates this repository, and the gap is structural | Everything the interop suite exercises runs in a subprocess the collector does not instrument, so all three `Program` entry points and the artifact's conformance tools read as 0% while executing on every run. Chasing them with in-process tests would mean duplicating the interop suite badly. The 70.1% figure is conservative, and the ≥ 80% target in `F8-04` should be set against that, not against a hypothetical instrumented-subprocess number. |
+| 2026-08-02 | `F2-08`'s coverage work was spent on real gaps, not on the percentage | The tools' own contract had nothing behind it: the character cap, the out-of-range clamp, the missing-file message and append-versus-overwrite were only smoke-tested through interop. Those tests moved the Server package from 65.0% to 82.2% as a side effect. `AgentHostedService` was added for the same reason — it owns the shutdown path `F2-06` changed and had no test at all. |
 | 2026-08-02 | A test asserting that a missing `openAI:model` fails validation was wrong and was rewritten | `Model` has a default of `gpt-4o-mini`, so `[Required]` is satisfied and no failure occurs. Unlike `ApiKey`, which has no default, a missing model is not a configuration error. The test now pins the fallback instead. Recorded because the failure came from the test's premise, not the code. |
 
 ---
