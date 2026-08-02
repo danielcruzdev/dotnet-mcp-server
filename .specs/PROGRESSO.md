@@ -10,10 +10,10 @@
 **Phase 1 — SDK Migration & Foundation** ✅ complete · **Phase 2 — Modern .NET Architecture** 🟦 in progress
 
 ```
-Overall   ████░░░░░░░░░░░░░░░░  17 / 80 tasks   (21%)
+Overall   ████░░░░░░░░░░░░░░░░  18 / 80 tasks   (22%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
-Phase 2   ███████░░░░░░░░░░░░░   3 / 9   🟦
+Phase 2   █████████░░░░░░░░░░░   4 / 9   🟦
 Phase 3   ░░░░░░░░░░░░░░░░░░░░   0 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
@@ -22,9 +22,9 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 2 — `F2-04`, `IHttpClientFactory` with resilience. The typed client is
-already registered, so this adds the policies and the stub-handler test that proves a 429 is
-retried.
+**Next action:** Phase 2 — `F2-05`, move directory creation out of the study-note tool's
+constructor into an injected workspace service. `WorkspaceContext` already exists on the server
+side, so this is about where the side effect happens, not about new infrastructure.
 
 **Phase 1 outcome:** both servers are driven end to end by the **official SDK client** as real
 subprocesses — 13 integration tests. The hand-written artifact interoperates with an
@@ -97,7 +97,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ✅ | **F2-01** | Adopt the Generic Host in the agent, matching the server's SDK-provided host | A6 |
 | ✅ | **F2-02** | `IOptions<T>` + `ValidateDataAnnotations().ValidateOnStart()` | A6 |
 | ✅ | **F2-03** | Structured `ILogger` — server logs to stderr only | A6, C5 |
-| ⬜ | **F2-04** | `IHttpClientFactory` + resilience: retry, backoff, timeout, circuit breaker, 429 | A8 |
+| ✅ | **F2-04** | `IHttpClientFactory` + resilience: retry, backoff, timeout, circuit breaker, 429 | A8 |
 | ⬜ | **F2-05** | Move directory creation out of `AppendStudyNoteTool`'s constructor | B6 |
 | ⬜ | **F2-06** | Make console input cancellable (Ctrl+C works) | A9 |
 | ⬜ | **F2-07** | Degrade gracefully at the tool-iteration limit | A10 |
@@ -107,11 +107,13 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 **Done when**
 - [x] No `new` on a service type in either entry point — the agent's `Program.cs` is a host
       builder; `HttpClient`, the chat client, the runner and the MCP connection all come from DI
-- [ ] A missing `OPENAI_API_KEY` fails at startup with a clear message — **done**, verified by
-      running the binary with the variable unset: `DataAnnotation validation failed for
-      'OpenAiSettings' members: 'ApiKey'`. Left unticked because the box is Phase 2's, and
-      `F2-04`'s criterion below is still open
-- [ ] A transient HTTP 429 is retried transparently, proven by a stub-handler test
+- [x] A missing `OPENAI_API_KEY` fails at startup with a clear message — verified by running
+      the binary with the variable unset: `DataAnnotation validation failed for
+      'OpenAiSettings' members: 'ApiKey'`, exit code 82
+- [x] A transient HTTP 429 is retried transparently, proven by a stub-handler test — four tests
+      in `OpenAiResilienceTests` drive the shipped registration with only the transport
+      replaced: a 429 then a 200 succeeds in two attempts, a permanent 429 stops at four, and a
+      400 is not retried at all
 - [ ] Coverage ≥ 60% with every project reporting
 - [ ] No Portuguese strings remain in `src/`
 
@@ -300,7 +302,7 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
 | MCP capabilities served | tools only | tools only | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 4 | 12+ |
-| Test cases | 69 | 68 ⚠️ | 200+ |
+| Test cases | 69 | 72 ⚠️ | 200+ |
 | Integration tests (real client ↔ real server) | 0 | **13** | grows with each phase |
 | Line coverage | not measured | not measured | ≥ 80% |
 | Projects under test | 2 / 3 | **4 / 4** | all |
@@ -309,10 +311,11 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | ADRs published | 0 | **1** | 4+ |
 | Transports | 1 (non-compliant) | 1 (spec-compliant, both servers) | 2 (stdio + HTTP) |
 
-> ⚠️ **Test count is still below baseline, 69 → 68.** Deleting `ScenarioTests` in Phase 1 removed 18 in-process
-> cases that exercised the old `IMcpTool` abstraction; Phase 2 has since added 10 covering the agent's
-> configuration surface. The gap is nearly closed, but it closed by adding *different* coverage, not by
-> rebuilding what was lost — no multi-tool scenario coverage exists yet. That remains owed against `F2-08`.
+> ⚠️ **The count is back above baseline, 69 → 72, but not by rebuilding what was lost.** Deleting
+> `ScenarioTests` in Phase 1 removed 18 in-process cases that exercised the old `IMcpTool` abstraction;
+> Phase 2 has since added 14 covering the agent's configuration surface and its HTTP resilience pipeline.
+> That is *different* coverage — no multi-tool scenario coverage exists yet, and it remains owed
+> against `F2-08`. Reading the raw number as recovery would be wrong.
 
 ---
 
@@ -361,6 +364,10 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-08-02 | `AgentSettingsLoader` deleted; path derivation moved to `McpSettingsSetup` (`IPostConfigureOptions<McpSettings>`) | `IConfiguration` replaces the JSON loading and environment overrides, but repository-root discovery and server-binary resolution are post-binding derivation, not binding. As an options setup they are constructor-injectable and unit-testable — the logic had no tests at all before. CLAUDE.md, `docs/INSTALL.md` and the `verify-mcp-server` skill named the old symbol and were updated in the same commit. |
 | 2026-08-02 | **`.env.example` reintroduced C5 and was fixed outside its task** | It shipped `MCP_COMMAND=dotnet` and `MCP_ARGUMENTS=run --project …`. `appsettings.json` deliberately leaves both blank so the compiled binary is resolved, but environment variables override the blank — so anyone following the documented example got `dotnet run` back, putting MSBuild output on the protocol channel. Adjacent to `F2-02` rather than part of it, fixed because the file documents the exact mechanism this task rewrote. |
 | 2026-08-02 | Analyzers force `LoggerMessage` source generation, not direct `ILogger` calls | CA1848 and CA1873 are errors under `TreatWarningsAsErrors`. This pushed the logging toward source-generated partial methods, which is the idiomatic form anyway — worth knowing before writing any further logging in this repository. |
+| 2026-08-02 | **`AddStandardResilienceHandler` adopted, but its timeouts are wrong for this caller and were widened** | The standard pipeline defaults to 10 s per attempt and 30 s overall — sized for a fast internal dependency. A chat completion carrying tool definitions routinely exceeds both, so shipping the defaults would have introduced a timeout bug the previous raw `HttpClient` did not have. Raised to 100 s per attempt and 300 s overall. The circuit breaker's sampling duration follows at 240 s because the library validates it at ≥ 2× the attempt timeout. |
+| 2026-08-02 | The circuit breaker's default threshold is unreachable for this agent, so it was lowered | 100 requests per sampling window with a 10% failure ratio describes a service under load, not a single-user console session — the breaker would never have opened, making it decoration. Set to 4 requests at a 50% ratio: high enough that one blip does not trip it, low enough that a sustained outage fails fast. |
+| 2026-08-02 | `HttpClient.Timeout` set to `Timeout.InfiniteTimeSpan` on the typed client | `HttpClient.Timeout` sits above the handler chain and bounds the *entire* send, retries included. Left at its 100 s default it would have silently capped the 300 s total-request policy and cancelled retries mid-flight. The resilience pipeline owns every timeout, or none of them. |
+| 2026-08-02 | Runtime extension packages moved 10.0.0 → 10.0.10, forced by the resilience package | `Microsoft.Extensions.Http.Resilience` ships from dotnet/extensions on its own version train (10.8.0) and requires `Microsoft.Extensions.Http` ≥ 10.0.10; the 10.0.0 pin produced NU1605, which is an error here. `Hosting` and `Options.DataAnnotations` were moved with it to keep the servicing train consistent rather than leaving one package ahead. |
 | 2026-08-02 | A test asserting that a missing `openAI:model` fails validation was wrong and was rewritten | `Model` has a default of `gpt-4o-mini`, so `[Required]` is satisfied and no failure occurs. Unlike `ApiKey`, which has no default, a missing model is not a configuration error. The test now pins the fallback instead. Recorded because the failure came from the test's premise, not the code. |
 
 ---

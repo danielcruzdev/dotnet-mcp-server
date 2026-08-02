@@ -15,10 +15,17 @@
     <PackageVersion Include="ModelContextProtocol.Core" Version="2.0.0" />
   </ItemGroup>
 
+  <!--
+    The runtime extensions ship on one servicing train and are kept on one version.
+    Microsoft.Extensions.Http.Resilience comes from dotnet/extensions instead, which versions
+    independently — it requires Microsoft.Extensions.Http >= 10.0.10, which is what moved the
+    group off 10.0.0.
+  -->
   <ItemGroup Label="Hosting and configuration">
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.8.0" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup Label="Testing">

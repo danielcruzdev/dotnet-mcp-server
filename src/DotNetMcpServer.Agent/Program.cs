@@ -22,8 +22,7 @@ builder.Services.AddAgentOptions(builder.Configuration);
 builder.Services.AddSingleton<IPostConfigureOptions<McpSettings>>(
     _ => new McpSettingsSetup(AppContext.BaseDirectory, Directory.GetCurrentDirectory()));
 
-// Resilience policies land in F2-04; this replaces the raw `new HttpClient()`.
-builder.Services.AddHttpClient<OpenAiChatClient>();
+builder.Services.AddOpenAiChatClient();
 
 builder.Services.AddSingleton<InteractiveAgentRunner>();
 builder.Services.AddHostedService<AgentHostedService>();
