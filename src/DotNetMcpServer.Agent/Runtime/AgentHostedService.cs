@@ -81,17 +81,37 @@ internal sealed partial class AgentHostedService : IHostedService, IAsyncDisposa
     }
 
     /// <remarks>
-    /// The session task is deliberately not awaited here: it may be parked on a blocking
-    /// <see cref="Console.ReadLine"/>, which does not observe cancellation. Making console
-    /// input cancellable is F2-06.
+    /// The session is awaited now that the console read observes cancellation, so shutdown
+    /// waits for the conversation to unwind instead of racing it. The host's own shutdown
+    /// timeout bounds the wait — a session that ignores cancellation must not hold the
+    /// process open.
     /// </remarks>
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         await _stopping.CancelAsync();
+
+        if (_session is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _session.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            LogSessionOutlastedShutdown();
+        }
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Connecting to the MCP server at {Command}")]
     private partial void LogConnecting(string command);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The agent session did not finish within the shutdown timeout")]
+    private partial void LogSessionOutlastedShutdown();
 
     [LoggerMessage(Level = LogLevel.Error, Message = "The agent session ended with an error")]
     private partial void LogSessionFailed(Exception exception);

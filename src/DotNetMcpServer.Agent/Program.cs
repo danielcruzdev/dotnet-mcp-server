@@ -24,6 +24,7 @@ builder.Services.AddSingleton<IPostConfigureOptions<McpSettings>>(
 
 builder.Services.AddOpenAiChatClient();
 
+builder.Services.AddSingleton<IUserInput, ConsoleUserInput>();
 builder.Services.AddSingleton<InteractiveAgentRunner>();
 builder.Services.AddHostedService<AgentHostedService>();
 

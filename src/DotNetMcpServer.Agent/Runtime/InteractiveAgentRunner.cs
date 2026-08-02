@@ -14,15 +14,18 @@ public sealed partial class InteractiveAgentRunner
 {
     private readonly AgentRuntimeSettings _runtimeSettings;
     private readonly OpenAiChatClient _openAiClient;
+    private readonly IUserInput _userInput;
     private readonly ILogger<InteractiveAgentRunner> _logger;
 
     public InteractiveAgentRunner(
         IOptions<AgentRuntimeSettings> runtimeSettings,
         OpenAiChatClient openAiClient,
+        IUserInput userInput,
         ILogger<InteractiveAgentRunner> logger)
     {
         _runtimeSettings = runtimeSettings.Value;
         _openAiClient = openAiClient;
+        _userInput = userInput;
         _logger = logger;
     }
 
@@ -53,15 +56,18 @@ public sealed partial class InteractiveAgentRunner
         while (!cancellationToken.IsCancellationRequested)
         {
             Console.Write("You > ");
-            var userInput = Console.ReadLine();
+            var userInput = await _userInput.ReadLineAsync(cancellationToken);
+
+            // null is end of input, not an empty line. Treating the two alike made a closed
+            // stdin spin the loop at full CPU, reprinting the prompt forever.
+            if (userInput is null || userInput.Equals("exit", StringComparison.OrdinalIgnoreCase))
+            {
+                break;
+            }
+
             if (string.IsNullOrWhiteSpace(userInput))
             {
                 continue;
-            }
-
-            if (userInput.Equals("exit", StringComparison.OrdinalIgnoreCase))
-            {
-                break;
             }
 
             messages.Add(ChatMessageFactory.User(userInput));
