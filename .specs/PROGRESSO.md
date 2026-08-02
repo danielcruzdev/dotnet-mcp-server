@@ -10,10 +10,10 @@
 **Phase 1 — SDK Migration & Foundation** ✅ complete · **Phase 2 — Modern .NET Architecture** 🟦 in progress
 
 ```
-Overall   █████░░░░░░░░░░░░░░░  21 / 80 tasks   (26%)
+Overall   █████░░░░░░░░░░░░░░░  22 / 80 tasks   (27%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
-Phase 2   ████████████████░░░░   7 / 9   🟦
+Phase 2   ██████████████████░░   8 / 9   🟦
 Phase 3   ░░░░░░░░░░░░░░░░░░░░   0 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
@@ -103,7 +103,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ✅ | **F2-06** | Make console input cancellable (Ctrl+C works) | A9 |
 | ✅ | **F2-07** | Degrade gracefully at the tool-iteration limit | A10 |
 | 🟦 | **F2-08** | Reference and test the Agent project | A5 |
-| 🟦 | **F2-09** | Migrate all comments, messages, and logs to English | D3 |
+| ✅ | **F2-09** | Migrate all comments, messages, and logs to English | D3 |
 
 **Done when**
 - [x] No `new` on a service type in either entry point — the agent's `Program.cs` is a host
@@ -116,7 +116,9 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
       replaced: a 429 then a 200 succeeds in two attempts, a permanent 429 stops at four, and a
       400 is not retried at all
 - [ ] Coverage ≥ 60% with every project reporting
-- [ ] No Portuguese strings remain in `src/`
+- [x] No Portuguese strings remain in `src/` — swept across all 30 tracked files: comments,
+      XML docs, exception text, log messages, console output and `appsettings.json`. Also
+      clean in `tests/` and `docs/`
 
 **Partial progress — recorded rather than claimed:**
 - `F2-08` is 🟦, not ✅. The test project references the Agent project, and 20 tests now cover
@@ -131,9 +133,10 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
   the side effect was already at call time. What was left was the second half of the task's
   wording, moving the creation into the injected workspace service, which is done. Recorded
   because "✅" here means less than the finding text implies.
-- `F2-09` is 🟦. Portuguese was migrated in the files this change touched
-  (`InteractiveAgentRunner`, `OpenAiChatClient`, `.env.example`). A sweep of the rest of `src/`
-  has not been done.
+- `F2-09` closed on a sweep that found nothing left to migrate. The work had already happened
+  incidentally: Phase 1 rewrote most of `src/` onto the SDK, and rewritten files came back in
+  English. The task's value was the verification, not the change — worth recording so the ✅ is
+  not read as a day's translation.
 
 ---
 
@@ -285,7 +288,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ⬜ | **F8-03** | Enforce `dotnet format --verify-no-changes` in CI | B5 |
 | ⬜ | **F8-04** | Collect coverage → Codecov → badge | B5 |
 | ⬜ | **F8-05** | Release workflow: semver, GitHub Releases, signed artifacts, SBOM | D5 |
-| ⬜ | **F8-06** | English README: demo GIF, diagrams, install snippet, badges — SDK path first, artifact as "how it works underneath" | D1, D3 |
+| ⬜ | **F8-06** | English README **and `examples/EXAMPLES.md`**: demo GIF, diagrams, install snippet, badges — SDK path first, artifact as "how it works underneath" | D1, D3 |
 | ⬜ | **F8-07** | Record the demos: agent session, Claude Desktop, distributed trace | D1 |
 | ⬜ | **F8-08** | Remaining ADRs: Streamable HTTP, Pratt parser, RAG retrieval strategy | D2 |
 | ⬜ | **F8-09** | Add `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md` | D2 |
@@ -386,6 +389,7 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-08-02 | The agent's turn loop is tested against a **real** MCP server, not a faked client | `McpClient` is abstract with non-virtual methods and an `[Experimental]` constructor, so a test double is not available without suppressing a diagnostic that `TreatWarningsAsErrors` turns into a build failure. Rather than fight that, `AgentTurnTests` stubs only the model — over the same `HttpMessageHandler` seam `F2-04` established — and lets the tool calls really execute against the server subprocess. The constraint produced a better test than the one originally intended. |
 | 2026-08-02 | `InternalsVisibleTo` added to the Agent project instead of widening its public API | `CompleteTurnAsync` needs to be reachable from a test, and it is not something a consumer should call. One MSBuild item is cheaper than a public method that exists only for testing, and it is what makes the `F2-08` coverage work possible without further surface changes. |
 | 2026-08-02 | The exhausted-turn answer is the model's own narration plus a notice — no extra model call | The alternative was one final completion with tools disabled, forcing an answer. That reads better but adds an API call, a failure mode, and a second timeout to the unhappy path. The narration the model already produced is a real partial answer and costs nothing. Revisit if it proves too thin in use. |
+| 2026-08-02 | **`examples/EXAMPLES.md` is still Portuguese and belonged to no task; folded into `F8-06`** | Found by the `F2-09` sweep. `F2-09`'s criterion is `src/`, and D1 hands the README to `F8-06`, but nothing claimed the examples document — it would have shipped in Portuguese next to an English README. It is not translated here because it should be rewritten with the README, in one voice, not patched ahead of it. |
 | 2026-08-02 | A test asserting that a missing `openAI:model` fails validation was wrong and was rewritten | `Model` has a default of `gpt-4o-mini`, so `[Required]` is satisfied and no failure occurs. Unlike `ApiKey`, which has no default, a missing model is not a configuration error. The test now pins the fallback instead. Recorded because the failure came from the test's premise, not the code. |
 
 ---
