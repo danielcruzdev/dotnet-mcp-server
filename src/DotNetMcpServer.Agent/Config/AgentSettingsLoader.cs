@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
-using DotNetMcpServer.Shared.Json;
+using DotNetMcpServer.Agent.Json;
 
 namespace DotNetMcpServer.Agent.Config;
 
@@ -14,6 +14,7 @@ public static class AgentSettingsLoader
         var workingDirectoryBase = ResolveWorkingDirectoryBase(settings.Mcp.WorkingDirectory, applicationBaseDirectory, currentDirectory);
         settings.Mcp.WorkingDirectory = workingDirectoryBase;
         settings.Mcp.WorkspaceRoot = ResolveDirectory(settings.Mcp.WorkspaceRoot, settings.Mcp.WorkingDirectory);
+        ResolveServerCommand(settings.Mcp, applicationBaseDirectory, workingDirectoryBase);
         settings.Runtime.MaxToolIterations = Math.Clamp(settings.Runtime.MaxToolIterations, 1, 12);
 
         return settings;
@@ -21,9 +22,9 @@ public static class AgentSettingsLoader
 
     /// <summary>
     /// Resolves the working directory. If the configured path is relative (or "."),
-    /// it first tries to anchor it to the repository root (found by searching for a *.sln
-    /// file walking up from <paramref name="applicationBaseDirectory"/>). Falls back to
-    /// <paramref name="currentDirectory"/> when no solution root is found.
+    /// it first tries to anchor it to the repository root (found by walking up from
+    /// <paramref name="applicationBaseDirectory"/>). Falls back to
+    /// <paramref name="currentDirectory"/> when no repository root is found.
     /// Absolute paths are returned as-is.
     /// </summary>
     private static string ResolveWorkingDirectoryBase(string configuredPath, string applicationBaseDirectory, string currentDirectory)
@@ -40,9 +41,9 @@ public static class AgentSettingsLoader
     }
 
     /// <summary>
-    /// Walks up the directory tree from <paramref name="startDirectory"/> looking for a
-    /// folder that contains at least one <c>*.sln</c> file, which indicates the repository root.
-    /// Returns <c>null</c> if no such folder is found.
+    /// Walks up the directory tree from <paramref name="startDirectory"/> looking for a folder
+    /// that carries a repository-root marker: a solution file (<c>*.slnx</c> or <c>*.sln</c>)
+    /// or a <c>.git</c> directory. Returns <c>null</c> if no such folder is found.
     /// </summary>
     private static string? FindRepositoryRoot(string startDirectory)
     {
@@ -50,7 +51,7 @@ public static class AgentSettingsLoader
 
         while (!string.IsNullOrEmpty(current))
         {
-            if (Directory.GetFiles(current, "*.sln", SearchOption.TopDirectoryOnly).Length > 0)
+            if (IsRepositoryRoot(current))
             {
                 return current;
             }
@@ -65,6 +66,47 @@ public static class AgentSettingsLoader
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// A directory is treated as the repository root when it holds a solution file or a
+    /// <c>.git</c> directory. Both solution formats are accepted so the lookup keeps working
+    /// whichever one the repository standardises on.
+    /// </summary>
+    private static bool IsRepositoryRoot(string directory)
+    {
+        return Directory.GetFiles(directory, "*.slnx", SearchOption.TopDirectoryOnly).Length > 0
+            || Directory.GetFiles(directory, "*.sln", SearchOption.TopDirectoryOnly).Length > 0
+            || Directory.Exists(Path.Combine(directory, ".git"));
+    }
+
+    /// <summary>
+    /// Picks the MCP server executable when configuration leaves <c>command</c> blank.
+    /// </summary>
+    /// <remarks>
+    /// The server is deliberately launched as a compiled binary rather than via
+    /// <c>dotnet run</c>: MSBuild writes build output to stdout, and stdout is the MCP
+    /// protocol channel. A single build warning would corrupt the session.
+    /// The agent's own output folder tells us the configuration and target framework,
+    /// so the sibling server build is found without any extra configuration.
+    /// </remarks>
+    private static void ResolveServerCommand(McpSettings mcp, string applicationBaseDirectory, string repositoryRoot)
+    {
+        if (!string.IsNullOrWhiteSpace(mcp.Command))
+        {
+            return;
+        }
+
+        var agentOutput = new DirectoryInfo(applicationBaseDirectory);
+        var targetFramework = agentOutput.Name;
+        var configuration = agentOutput.Parent?.Name ?? "Debug";
+
+        var executableName = OperatingSystem.IsWindows()
+            ? "DotNetMcpServer.Server.exe"
+            : "DotNetMcpServer.Server";
+
+        mcp.Command = Path.Combine(
+            repositoryRoot, "src", "DotNetMcpServer.Server", "bin", configuration, targetFramework, executableName);
     }
 
     private static AgentSettings LoadFromJson(string baseDirectory)

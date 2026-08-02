@@ -1,58 +1,19 @@
-using DotNetMcpServer.Server.Tools;
-using DotNetMcpServer.Shared.JsonRpc;
+using DotNetMcpServer.Server.Workspace;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
-namespace DotNetMcpServer.Server;
+var builder = Host.CreateApplicationBuilder(args);
 
-internal static class Program
-{
-    private const string ServerName = "dotnet-mcp-server";
-    private const string ServerVersion = "1.0.0";
-    private const string DefaultProtocolVersion = "2025-03-26";
+// stdout carries the MCP protocol stream and nothing else. Every log line goes to stderr,
+// otherwise a single log write corrupts the session for the client.
+builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 
-    public static async Task Main(string[] args)
-    {
-        using var cts = new CancellationTokenSource();
-        Console.CancelKeyPress += (_, eventArgs) =>
-        {
-            eventArgs.Cancel = true;
-            cts.Cancel();
-        };
+builder.Services.AddSingleton(WorkspaceContext.Resolve(args));
 
-        var workspaceRoot = ResolveWorkspaceRoot(args);
-        Console.Error.WriteLine($"[{ServerName}] Workspace root: {workspaceRoot}");
+builder.Services
+    .AddMcpServer()
+    .WithStdioServerTransport()
+    .WithToolsFromAssembly();
 
-        var registry = new ToolRegistry(new IMcpTool[]
-        {
-            new GetCurrentDateTimeTool(),
-            new CalculateExpressionTool(),
-            new ReadTextFileTool(workspaceRoot),
-            new AppendStudyNoteTool(workspaceRoot)
-        });
-
-        await using var rpc = new JsonRpcStream(Console.OpenStandardInput(), Console.OpenStandardOutput());
-        var host = new McpServerHost(rpc, registry, ServerName, ServerVersion, DefaultProtocolVersion);
-        await host.RunAsync(cts.Token);
-    }
-
-    private static string ResolveWorkspaceRoot(string[] args)
-    {
-        for (var i = 0; i < args.Length - 1; i++)
-        {
-            if (args[i].Equals("--workspace-root", StringComparison.OrdinalIgnoreCase))
-            {
-                return Path.GetFullPath(args[i + 1]);
-            }
-        }
-
-        var environmentOverride = Environment.GetEnvironmentVariable("MCP_WORKSPACE_ROOT");
-        if (!string.IsNullOrWhiteSpace(environmentOverride))
-        {
-            return Path.GetFullPath(environmentOverride);
-        }
-
-        return Directory.GetCurrentDirectory();
-    }
-}
-
-
-
+await builder.Build().RunAsync();

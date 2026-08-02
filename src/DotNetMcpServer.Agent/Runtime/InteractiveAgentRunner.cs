@@ -2,9 +2,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using DotNetMcpServer.Agent.Config;
 using DotNetMcpServer.Agent.Llm;
-using DotNetMcpServer.Agent.Mcp;
-using DotNetMcpServer.Shared.Json;
-using DotNetMcpServer.Shared.Mcp;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
+using DotNetMcpServer.Agent.Json;
 
 namespace DotNetMcpServer.Agent.Runtime;
 
@@ -27,7 +27,7 @@ public sealed class InteractiveAgentRunner
         Console.WriteLine("Digite sua pergunta. Use 'exit' para encerrar.");
         Console.WriteLine();
 
-        var tools = await _mcpClient.ListToolsAsync(cancellationToken);
+        var tools = await _mcpClient.ListToolsAsync(cancellationToken: cancellationToken);
         Console.WriteLine($"Ferramentas MCP carregadas: {string.Join(", ", tools.Select(tool => tool.Name))}");
         Console.WriteLine();
 
@@ -60,7 +60,7 @@ public sealed class InteractiveAgentRunner
         }
     }
 
-    private async Task<string> CompleteTurnAsync(List<JsonObject> messages, IReadOnlyList<McpToolDefinition> tools, CancellationToken cancellationToken)
+    private async Task<string> CompleteTurnAsync(List<JsonObject> messages, IList<McpClientTool> tools, CancellationToken cancellationToken)
     {
         for (var iteration = 0; iteration < _runtimeSettings.MaxToolIterations; iteration++)
         {
@@ -81,7 +81,10 @@ public sealed class InteractiveAgentRunner
             foreach (var toolCall in assistantTurn.ToolCalls)
             {
                 Console.WriteLine($"[tool] Executando {toolCall.Name}...");
-                var result = await _mcpClient.CallToolAsync(toolCall.Name, toolCall.Arguments, cancellationToken);
+                var arguments = toolCall.Arguments.ToDictionary(
+                    argument => argument.Key,
+                    argument => (object?)argument.Value);
+                var result = await _mcpClient.CallToolAsync(toolCall.Name, arguments, cancellationToken: cancellationToken);
                 var toolText = BuildToolContent(result);
                 messages.Add(ChatMessageFactory.Tool(toolCall.Id, toolCall.Name, toolText));
             }
@@ -90,18 +93,20 @@ public sealed class InteractiveAgentRunner
         throw new InvalidOperationException("Limite de iterações de tool-calling atingido sem resposta final.");
     }
 
-    private static string BuildToolContent(McpToolCallResult result)
+    private static string BuildToolContent(CallToolResult result)
     {
         var content = string.Join(
             Environment.NewLine,
-            result.Content.Select(item => item.Text).Where(text => !string.IsNullOrWhiteSpace(text)));
+            result.Content.OfType<TextContentBlock>()
+                .Select(block => block.Text)
+                .Where(text => !string.IsNullOrWhiteSpace(text)));
 
         if (string.IsNullOrWhiteSpace(content))
         {
             content = "(Tool sem retorno textual.)";
         }
 
-        if (result.IsError)
+        if (result.IsError == true)
         {
             return $"[TOOL_ERROR]\n{content}";
         }

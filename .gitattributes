@@ -1,0 +1,28 @@
+# Normalise line endings. Matches `end_of_line = lf` in .editorconfig, so a Windows
+# checkout cannot introduce CRLF churn on a repository that CI builds on Linux.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF or cmd.exe misparses them.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files: never normalise, never diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.dll binary
+*.exe binary
+*.pfx binary
+*.snk binary
+
+# Improve diffs for C# sources.
+*.cs text diff=csharp
+
+# Keep generated/vendored content out of language statistics and diffs.
+examples/jsonrpc/*.json linguist-generated=true

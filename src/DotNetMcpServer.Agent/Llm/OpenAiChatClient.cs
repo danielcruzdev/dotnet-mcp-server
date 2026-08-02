@@ -1,9 +1,9 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using ModelContextProtocol.Client;
 using DotNetMcpServer.Agent.Config;
-using DotNetMcpServer.Shared.Json;
-using DotNetMcpServer.Shared.Mcp;
+using DotNetMcpServer.Agent.Json;
 
 namespace DotNetMcpServer.Agent.Llm;
 
@@ -18,7 +18,7 @@ public sealed class OpenAiChatClient
         _settings = settings;
     }
 
-    public async Task<AssistantTurn> CompleteAsync(IReadOnlyList<JsonObject> messages, IReadOnlyList<McpToolDefinition> tools, CancellationToken cancellationToken)
+    public async Task<AssistantTurn> CompleteAsync(IReadOnlyList<JsonObject> messages, IList<McpClientTool> tools, CancellationToken cancellationToken)
     {
         var payload = BuildPayload(messages, tools);
 
@@ -45,7 +45,7 @@ public sealed class OpenAiChatClient
         return $"{_settings.BaseUrl.TrimEnd('/')}/chat/completions";
     }
 
-    private JsonObject BuildPayload(IReadOnlyList<JsonObject> messages, IReadOnlyList<McpToolDefinition> tools)
+    private JsonObject BuildPayload(IReadOnlyList<JsonObject> messages, IList<McpClientTool> tools)
     {
         var messageArray = new JsonArray();
         foreach (var message in messages)
@@ -72,7 +72,9 @@ public sealed class OpenAiChatClient
                     {
                         ["name"] = tool.Name,
                         ["description"] = tool.Description,
-                        ["parameters"] = tool.InputSchema.DeepClone()
+                            // The SDK exposes the tool's schema as a JsonElement; OpenAI wants it
+                        // inline under "parameters".
+                        ["parameters"] = JsonNode.Parse(tool.JsonSchema.GetRawText())
                     }
                 });
             }

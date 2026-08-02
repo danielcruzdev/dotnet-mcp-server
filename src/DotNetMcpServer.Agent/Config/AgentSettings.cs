@@ -43,8 +43,13 @@ public sealed class McpSettings
     [JsonPropertyName("workspaceRoot")]
     public string WorkspaceRoot { get; set; } = ".";
 
-    [JsonPropertyName("protocolVersion")]
-    public string ProtocolVersion { get; set; } = "2025-03-26";
+    /// <summary>
+    /// <see cref="Arguments"/> split for process launch. The SDK transport takes an argument
+    /// list rather than a single string, which also avoids quoting bugs on paths with spaces.
+    /// </summary>
+    [JsonIgnore]
+    public IList<string> ArgumentList =>
+        Arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
 
 public sealed class AgentRuntimeSettings
