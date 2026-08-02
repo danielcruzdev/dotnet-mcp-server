@@ -9,7 +9,7 @@ Code, VS Code, Cursor.
 
 `dotnet run` sends MSBuild output to stdout, and stdout is the protocol channel. A single build
 warning corrupts the stream and the client reports a parse error or an empty tool list. This is
-the same constraint the agent honours in `AgentSettingsLoader.ResolveServerCommand`.
+the same constraint the agent honours in `McpSettingsSetup.ResolveServerCommand`.
 
 ## Build first
 

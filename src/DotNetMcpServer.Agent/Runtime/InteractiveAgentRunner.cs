@@ -2,36 +2,52 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using DotNetMcpServer.Agent.Config;
 using DotNetMcpServer.Agent.Llm;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using DotNetMcpServer.Agent.Json;
 
 namespace DotNetMcpServer.Agent.Runtime;
 
-public sealed class InteractiveAgentRunner
+public sealed partial class InteractiveAgentRunner
 {
     private readonly AgentRuntimeSettings _runtimeSettings;
     private readonly OpenAiChatClient _openAiClient;
-    private readonly McpClient _mcpClient;
+    private readonly IUserInput _userInput;
+    private readonly ILogger<InteractiveAgentRunner> _logger;
 
-    public InteractiveAgentRunner(AgentRuntimeSettings runtimeSettings, OpenAiChatClient openAiClient, McpClient mcpClient)
+    public InteractiveAgentRunner(
+        IOptions<AgentRuntimeSettings> runtimeSettings,
+        OpenAiChatClient openAiClient,
+        IUserInput userInput,
+        ILogger<InteractiveAgentRunner> logger)
     {
-        _runtimeSettings = runtimeSettings;
+        _runtimeSettings = runtimeSettings.Value;
         _openAiClient = openAiClient;
-        _mcpClient = mcpClient;
+        _userInput = userInput;
+        _logger = logger;
     }
 
-    public async Task RunAsync(CancellationToken cancellationToken)
+    /// <remarks>
+    /// <see cref="Console"/> here is the conversation with the user, not logging. Diagnostics
+    /// go through <see cref="ILogger"/>. The agent may use stdout freely — the stdout
+    /// restriction belongs to the MCP server, where stdout is the protocol channel.
+    /// </remarks>
+    public async Task RunAsync(McpClient mcpClient, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(mcpClient);
+
         Console.WriteLine("DotNetMcpServer AI Agent + MCP");
-        Console.WriteLine("Digite sua pergunta. Use 'exit' para encerrar.");
+        Console.WriteLine("Type your question. Use 'exit' to quit.");
         Console.WriteLine();
 
-        var tools = await _mcpClient.ListToolsAsync(cancellationToken: cancellationToken);
-        Console.WriteLine($"Ferramentas MCP carregadas: {string.Join(", ", tools.Select(tool => tool.Name))}");
+        var tools = await mcpClient.ListToolsAsync(cancellationToken: cancellationToken);
+        Console.WriteLine($"MCP tools loaded: {string.Join(", ", tools.Select(tool => tool.Name))}");
         Console.WriteLine();
 
-        // TODO: Implementar context windowing — o histórico cresce indefinidamente e pode exceder o limite de tokens do modelo.
+        // TODO: Implement context windowing — history grows without bound and will exceed the
+        // model's token limit in a long session. Tracked as F6-04.
         var messages = new List<JsonObject>
         {
             ChatMessageFactory.System(_runtimeSettings.SystemPrompt)
@@ -39,29 +55,36 @@ public sealed class InteractiveAgentRunner
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            Console.Write("Você > ");
-            var userInput = Console.ReadLine();
+            Console.Write("You > ");
+            var userInput = await _userInput.ReadLineAsync(cancellationToken);
+
+            // null is end of input, not an empty line. Treating the two alike made a closed
+            // stdin spin the loop at full CPU, reprinting the prompt forever.
+            if (userInput is null || userInput.Equals("exit", StringComparison.OrdinalIgnoreCase))
+            {
+                break;
+            }
+
             if (string.IsNullOrWhiteSpace(userInput))
             {
                 continue;
             }
 
-            if (userInput.Equals("exit", StringComparison.OrdinalIgnoreCase))
-            {
-                break;
-            }
-
             messages.Add(ChatMessageFactory.User(userInput));
 
-            var assistantReply = await CompleteTurnAsync(messages, tools, cancellationToken);
+            var assistantReply = await CompleteTurnAsync(mcpClient, messages, tools, cancellationToken);
             Console.WriteLine();
-            Console.WriteLine($"Agente > {assistantReply}");
+            Console.WriteLine($"Agent > {assistantReply}");
             Console.WriteLine();
         }
     }
 
-    private async Task<string> CompleteTurnAsync(List<JsonObject> messages, IList<McpClientTool> tools, CancellationToken cancellationToken)
+    internal async Task<string> CompleteTurnAsync(McpClient mcpClient, List<JsonObject> messages, IList<McpClientTool> tools, CancellationToken cancellationToken)
     {
+        // Whatever the model says while it is still calling tools. If it never reaches a final
+        // answer, this narration is the partial answer the user gets.
+        var narration = new List<string>();
+
         for (var iteration = 0; iteration < _runtimeSettings.MaxToolIterations; iteration++)
         {
             var assistantTurn = await _openAiClient.CompleteAsync(messages, tools, cancellationToken);
@@ -69,29 +92,68 @@ public sealed class InteractiveAgentRunner
             if (assistantTurn.ToolCalls.Count == 0)
             {
                 var content = string.IsNullOrWhiteSpace(assistantTurn.Content)
-                    ? "(Sem conteúdo retornado pelo modelo.)"
+                    ? "(The model returned no content.)"
                     : assistantTurn.Content;
 
                 messages.Add(ChatMessageFactory.Assistant(content));
                 return content;
             }
 
+            if (!string.IsNullOrWhiteSpace(assistantTurn.Content))
+            {
+                narration.Add(assistantTurn.Content.Trim());
+            }
+
             messages.Add(ChatMessageFactory.AssistantWithToolCalls(assistantTurn));
 
             foreach (var toolCall in assistantTurn.ToolCalls)
             {
-                Console.WriteLine($"[tool] Executando {toolCall.Name}...");
+                LogExecutingTool(toolCall.Name);
                 var arguments = toolCall.Arguments.ToDictionary(
                     argument => argument.Key,
                     argument => (object?)argument.Value);
-                var result = await _mcpClient.CallToolAsync(toolCall.Name, arguments, cancellationToken: cancellationToken);
+                var result = await mcpClient.CallToolAsync(toolCall.Name, arguments, cancellationToken: cancellationToken);
                 var toolText = BuildToolContent(result);
                 messages.Add(ChatMessageFactory.Tool(toolCall.Id, toolCall.Name, toolText));
             }
         }
 
-        throw new InvalidOperationException("Limite de iterações de tool-calling atingido sem resposta final.");
+        LogIterationLimitReached(_runtimeSettings.MaxToolIterations);
+
+        // The limit is a budget, not a failure. Throwing here ended the whole session over one
+        // stubborn turn — the user lost the conversation because the model would not stop
+        // calling tools. The history stays intact, so the next turn can carry on.
+        var partial = FormatExhaustedTurn(narration, _runtimeSettings.MaxToolIterations);
+        messages.Add(ChatMessageFactory.Assistant(partial));
+
+        return partial;
     }
+
+    /// <summary>
+    /// Renders the answer given when the tool budget runs out. Separated from the loop so the
+    /// wording can be asserted without driving a whole conversation.
+    /// </summary>
+    internal static string FormatExhaustedTurn(IReadOnlyList<string> narration, int maxToolIterations)
+    {
+        var notice =
+            $"(Stopped after {maxToolIterations} rounds of tool calls without reaching a final answer. " +
+            "Ask again, or narrow the question.)";
+
+        if (narration.Count == 0)
+        {
+            return notice;
+        }
+
+        return string.Join(Environment.NewLine, narration) + Environment.NewLine + Environment.NewLine + notice;
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Executing tool {ToolName}")]
+    private partial void LogExecutingTool(string toolName);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "The turn used all {MaxToolIterations} tool-calling rounds; returning a partial answer")]
+    private partial void LogIterationLimitReached(int maxToolIterations);
 
     private static string BuildToolContent(CallToolResult result)
     {
@@ -103,7 +165,7 @@ public sealed class InteractiveAgentRunner
 
         if (string.IsNullOrWhiteSpace(content))
         {
-            content = "(Tool sem retorno textual.)";
+            content = "(The tool returned no text.)";
         }
 
         if (result.IsError == true)

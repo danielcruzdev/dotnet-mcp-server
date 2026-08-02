@@ -1,21 +1,25 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ModelContextProtocol.Client;
 using DotNetMcpServer.Agent.Config;
 using DotNetMcpServer.Agent.Json;
 
 namespace DotNetMcpServer.Agent.Llm;
 
-public sealed class OpenAiChatClient
+public sealed partial class OpenAiChatClient
 {
     private readonly HttpClient _httpClient;
     private readonly OpenAiSettings _settings;
+    private readonly ILogger<OpenAiChatClient> _logger;
 
-    public OpenAiChatClient(HttpClient httpClient, OpenAiSettings settings)
+    public OpenAiChatClient(HttpClient httpClient, IOptions<OpenAiSettings> settings, ILogger<OpenAiChatClient> logger)
     {
         _httpClient = httpClient;
-        _settings = settings;
+        _settings = settings.Value;
+        _logger = logger;
     }
 
     public async Task<AssistantTurn> CompleteAsync(IReadOnlyList<JsonObject> messages, IList<McpClientTool> tools, CancellationToken cancellationToken)
@@ -34,7 +38,7 @@ public sealed class OpenAiChatClient
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException($"Falha na OpenAI ({(int)response.StatusCode}): {responseBody}");
+            throw new InvalidOperationException($"OpenAI request failed ({(int)response.StatusCode}): {responseBody}");
         }
 
         return ParseAssistantTurn(responseBody);
@@ -86,13 +90,13 @@ public sealed class OpenAiChatClient
         return payload;
     }
 
-    private static AssistantTurn ParseAssistantTurn(string responseBody)
+    private AssistantTurn ParseAssistantTurn(string responseBody)
     {
         var root = JsonNode.Parse(responseBody)?.AsObject()
-            ?? throw new InvalidDataException("Resposta inválida da OpenAI.");
+            ?? throw new InvalidDataException("The OpenAI response was not a JSON object.");
 
         var assistantMessage = root["choices"]?[0]?["message"] as JsonObject
-            ?? throw new InvalidDataException("Resposta sem mensagem da OpenAI.");
+            ?? throw new InvalidDataException("The OpenAI response carried no assistant message.");
 
         var content = ParseContent(assistantMessage["content"]);
         var toolCalls = ParseToolCalls(assistantMessage["tool_calls"] as JsonArray);
@@ -131,7 +135,12 @@ public sealed class OpenAiChatClient
         return string.Join(Environment.NewLine, parts);
     }
 
-    private static List<AssistantToolCall> ParseToolCalls(JsonArray? rawToolCalls)
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Could not parse the arguments for tool {ToolName}; falling back to an empty object")]
+    private partial void LogUnparsableToolArguments(Exception exception, string toolName);
+
+    private List<AssistantToolCall> ParseToolCalls(JsonArray? rawToolCalls)
     {
         var toolCalls = new List<AssistantToolCall>();
         if (rawToolCalls is null)
@@ -159,7 +168,7 @@ public sealed class OpenAiChatClient
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[agent] Falha ao interpretar argumentos da tool '{functionName}': {ex.Message}");
+                LogUnparsableToolArguments(ex, functionName);
                 arguments = new JsonObject();
             }
 

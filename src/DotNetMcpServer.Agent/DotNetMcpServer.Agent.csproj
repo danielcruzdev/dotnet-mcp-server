@@ -6,6 +6,19 @@
 
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol.Core" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
+  </ItemGroup>
+
+  <!--
+    The turn loop is driven directly by the tests: it needs a real McpClient, and McpClient is
+    abstract with non-virtual methods and an [Experimental] constructor, so it cannot be faked.
+    Exposing the loop internally is cheaper than widening the public surface for a test.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="DotNetMcpServer.Tests" />
   </ItemGroup>
 
   <ItemGroup>

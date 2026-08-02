@@ -56,7 +56,7 @@ If a client sees a parse error or refuses to connect, something wrote to stdout.
 - `Console.WriteLine` anywhere in `DotNetMcpServer.Server` — must be `ILogger`
 - Logging not pinned to stderr — `Program.cs` sets `LogToStandardErrorThreshold`
 - The server launched via `dotnet run` — MSBuild writes to stdout and corrupts the stream.
-  The agent resolves the compiled binary in `AgentSettingsLoader.ResolveServerCommand`; keep
+  The agent resolves the compiled binary in `McpSettingsSetup.ResolveServerCommand`; keep
   it that way.
 
 ### Timezone tools fail with "not found on this system"

@@ -21,7 +21,7 @@ These break silently. Every one has already cost real time.
 `LogToStandardErrorThreshold`. A single stray write corrupts the session for every client.
 
 **Never launch the server with `dotnet run`.** MSBuild writes to stdout — the protocol
-channel. `AgentSettingsLoader.ResolveServerCommand` resolves the compiled binary; keep it that
+channel. `McpSettingsSetup.ResolveServerCommand` resolves the compiled binary; keep it that
 way, including in docs and client config.
 
 **`src/Mcp.Protocol.Handwritten/` is frozen.** A study artifact, referenced by nothing

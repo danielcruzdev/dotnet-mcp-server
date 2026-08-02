@@ -122,6 +122,47 @@ public sealed class ToolLogicTests
         Assert.Throws<UnauthorizedAccessException>(() => workspace.ResolvePath(relativePath));
     }
 
+    /// <summary>
+    /// The directory is created on the call that needs it, not when the workspace is wired up.
+    /// Constructing the context must stay free of side effects.
+    /// </summary>
+    [Fact]
+    public void EnsureDirectory_creates_the_directory_only_when_it_is_asked_for()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ws-" + Guid.NewGuid().ToString("N"));
+
+        var workspace = new WorkspaceContext(root);
+        Assert.False(Directory.Exists(root));
+
+        try
+        {
+            var created = workspace.EnsureDirectory("notes");
+
+            Assert.True(Directory.Exists(created));
+            Assert.Equal(Path.Combine(workspace.Root, "notes"), created);
+
+            // Creating it a second time is not an error — the tool calls this on every note.
+            Assert.Equal(created, workspace.EnsureDirectory("notes"));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void EnsureDirectory_refuses_to_create_anything_outside_the_workspace()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ws-" + Guid.NewGuid().ToString("N"), "nested");
+        var workspace = new WorkspaceContext(root);
+
+        Assert.Throws<UnauthorizedAccessException>(() => workspace.EnsureDirectory("../escaped"));
+        Assert.False(Directory.Exists(Path.Combine(root, "..", "escaped")));
+    }
+
     [Fact]
     public void Resolve_prefers_the_workspace_root_argument()
     {
