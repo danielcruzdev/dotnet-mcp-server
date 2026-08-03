@@ -7,14 +7,14 @@
 
 ## Current status
 
-**Phase 2 — Modern .NET Architecture** ✅ complete · **Phase 3 — Full MCP Surface via SDK** ⬜ next
+**Phase 2 — Modern .NET Architecture** ✅ complete · **Phase 3 — Full MCP Surface via SDK** 🟦 in progress
 
 ```
-Overall   ██████░░░░░░░░░░░░░░  23 / 80 tasks   (29%)
+Overall   ██████░░░░░░░░░░░░░░  25 / 80 tasks   (31%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
 Phase 2   ████████████████████   9 / 9   ✅ complete
-Phase 3   ░░░░░░░░░░░░░░░░░░░░   0 / 10
+Phase 3   ████░░░░░░░░░░░░░░░░   2 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 Phase 6   ░░░░░░░░░░░░░░░░░░░░   0 / 10
@@ -22,9 +22,9 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 3 — `F3-01`, `resources/list` + `resources/read`. `WorkspaceContext`
-already owns path containment and now creates directories behind it, so a resource handler has
-the boundary it needs without adding a second one.
+**Next action:** Phase 3 — `F3-03`, `resources/subscribe` backed by a `FileSystemWatcher`.
+`WorkspaceResourceProvider` already maps between workspace paths and resource URIs, so the
+watcher only has to decide which changes are worth a notification.
 
 **Phase 2 outcome:** the agent is a hosted, injected, validated, observable application, and
 every project reports coverage — **70.1%**, against a 60% bar. The two findings that mattered
@@ -155,8 +155,8 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 
 | | ID | Task | Fixes |
 |:---:|---|---|---|
-| ⬜ | **F3-01** | `resources/list` + `resources/read` | A4 |
-| ⬜ | **F3-02** | Resource templates (RFC 6570 URI templates) | A4 |
+| ✅ | **F3-01** | `resources/list` + `resources/read` | A4 |
+| ✅ | **F3-02** | Resource templates (RFC 6570 URI templates) | A4 |
 | ⬜ | **F3-03** | `resources/subscribe` + update notifications via `FileSystemWatcher` | A4 |
 | ⬜ | **F3-04** | `prompts/list` + `prompts/get` with arguments | A4 |
 | ⬜ | **F3-05** | `completion/complete` for prompt and resource arguments | A4 |
@@ -318,10 +318,10 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Connects to a real MCP client | ❌ No | ✅ **Yes** — SDK client, real subprocess | ✅ Yes |
 | Protocol revision | `2025-03-26` | negotiated by the SDK | current stable, via SDK |
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
-| MCP capabilities served | tools only | tools only | tools + resources + prompts + logging + completion |
+| MCP capabilities served | tools only | tools + resources | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 4 | 12+ |
-| Test cases | 69 | 93 | 200+ |
-| Integration tests (real client ↔ real server) | 0 | **18** | grows with each phase |
+| Test cases | 69 | 108 | 200+ |
+| Integration tests (real client ↔ real server) | 0 | **33** | grows with each phase |
 | Line coverage | not measured | **70.1%** (branch 57.2%) | ≥ 80% |
 | Projects under test | 2 / 3 | **4 / 4** | all |
 | Build warnings | not enforced | **0, enforced** | 0, enforced |
