@@ -1,3 +1,4 @@
+using DotNetMcpServer.Server.Completions;
 using DotNetMcpServer.Server.Resources;
 using DotNetMcpServer.Server.Workspace;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,7 +26,8 @@ builder.Services
     .WithListResourcesHandler(WorkspaceResourceHandlers.ListResourcesAsync)
     .WithReadResourceHandler(WorkspaceResourceHandlers.ReadResourceAsync)
     .WithSubscribeToResourcesHandler(WorkspaceResourceHandlers.SubscribeAsync)
-    .WithUnsubscribeFromResourcesHandler(WorkspaceResourceHandlers.UnsubscribeAsync);
+    .WithUnsubscribeFromResourcesHandler(WorkspaceResourceHandlers.UnsubscribeAsync)
+    .WithCompleteHandler(WorkspaceCompletionHandler.CompleteAsync);
 
 // The SDK derives the resources capability from the handlers above, which tells a client that
 // subscriptions work. Nothing tells it the list itself is watched, so that is declared here.
