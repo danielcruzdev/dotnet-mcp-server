@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Text;
 using DotNetMcpServer.Server.Workspace;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
@@ -12,8 +13,15 @@ namespace DotNetMcpServer.Server.Tools;
 /// which is injected by the host — these methods never build a path themselves.
 /// </summary>
 [McpServerToolType]
-public static class WorkspaceTools
+public static partial class WorkspaceTools
 {
+    /// <summary>
+    /// The log category these tools write under. Named explicitly because a static class
+    /// cannot be a type argument to <see cref="ILogger{TCategoryName}"/>, and the category is
+    /// what a client sees on every notifications/message this server sends.
+    /// </summary>
+    private const string LogCategory = "DotNetMcpServer.Server.Tools.WorkspaceTools";
+
     private const int DefaultMaxCharacters = 1600;
     private const int MinimumMaxCharacters = 200;
     private const int MaximumMaxCharacters = 8000;
@@ -22,6 +30,7 @@ public static class WorkspaceTools
     [Description("Reads a text file from inside the project workspace.")]
     public static async Task<string> ReadTextFile(
         WorkspaceContext workspace,
+        ILoggerFactory loggerFactory,
         [Description("Path relative to the workspace root, e.g. README.md")] string path,
         [Description("Maximum number of characters to return (200-8000).")] int? maxCharacters = null,
         CancellationToken cancellationToken = default)
@@ -54,6 +63,9 @@ public static class WorkspaceTools
         var truncated = content.Length > limit;
         var body = truncated ? content[..limit] + "\n\n[content truncated]" : content;
 
+        var logger = loggerFactory.CreateLogger(LogCategory);
+        LogFileRead(logger, path, body.Length, truncated);
+
         var builder = new StringBuilder();
         builder.AppendLine(CultureInfo.InvariantCulture, $"File: {path}");
         builder.AppendLine(CultureInfo.InvariantCulture, $"Characters returned: {body.Length}");
@@ -67,6 +79,7 @@ public static class WorkspaceTools
     [Description("Creates or appends a note in notes/study-notes.md inside the workspace.")]
     public static async Task<string> AppendStudyNote(
         WorkspaceContext workspace,
+        ILoggerFactory loggerFactory,
         [Description("The note body.")] string note,
         [Description("Optional note title.")] string? title = null,
         CancellationToken cancellationToken = default)
@@ -82,8 +95,21 @@ public static class WorkspaceTools
 
         await File.AppendAllTextAsync(notesFile, entry, cancellationToken).ConfigureAwait(false);
 
+        var logger = loggerFactory.CreateLogger(LogCategory);
+        LogNoteAppended(logger, notesFile);
+
         return $"Note saved to: {notesFile}";
     }
+
+    // A client that turned logging up asked to see what the server is doing on its behalf.
+    // These are the two things it does that touch the user's disk.
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Read {Path}: {Characters} characters returned, truncated={Truncated}")]
+    private static partial void LogFileRead(ILogger logger, string path, int characters, bool truncated);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Appended a note to {Path}")]
+    private static partial void LogNoteAppended(ILogger logger, string path);
 
     /// <summary>
     /// Formats a single note entry. Separated from the file write so tests can assert on

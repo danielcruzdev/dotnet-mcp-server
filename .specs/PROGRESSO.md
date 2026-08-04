@@ -1,7 +1,7 @@
 # Execution Tracker — DotNetMcpServer
 
 > Companion to [`PRD.md`](PRD.md) v2.0. Task IDs match one-to-one and are named in commit bodies.
-> **Last updated:** 2026-07-28
+> **Last updated:** 2026-08-03
 
 ---
 
@@ -10,11 +10,11 @@
 **Phase 2 — Modern .NET Architecture** ✅ complete · **Phase 3 — Full MCP Surface via SDK** 🟦 in progress
 
 ```
-Overall   ███████░░░░░░░░░░░░░  28 / 80 tasks   (35%)
+Overall   ███████░░░░░░░░░░░░░  29 / 80 tasks   (36%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
 Phase 2   ████████████████████   9 / 9   ✅ complete
-Phase 3   ██████████░░░░░░░░░░   5 / 10
+Phase 3   ████████████░░░░░░░░   6 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 Phase 6   ░░░░░░░░░░░░░░░░░░░░   0 / 10
@@ -22,8 +22,8 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 3 — `F3-06`, `logging/setLevel` and log notifications, then `F3-07`
-progress. Both need a tool that runs long enough to have something to report.
+**Next action:** Phase 3 — `F3-07`, progress notifications. Needs a tool that runs long enough
+to have something to report; the resource walker is the natural candidate.
 
 **Phase 2 outcome:** the agent is a hosted, injected, validated, observable application, and
 every project reports coverage — **70.1%**, against a 60% bar. The two findings that mattered
@@ -159,7 +159,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ✅ | **F3-03** | `resources/subscribe` + update notifications via `FileSystemWatcher` | A4 |
 | ✅ | **F3-04** | `prompts/list` + `prompts/get` with arguments | A4 |
 | ✅ | **F3-05** | `completion/complete` for prompt and resource arguments | A4 |
-| ⬜ | **F3-06** | `logging/setLevel` + log notifications | A4 |
+| ✅ | **F3-06** | `logging/setLevel` + log notifications | A4 |
 | ⬜ | **F3-07** | Progress notifications for long-running tools | A4 |
 | ⬜ | **F3-08** | `outputSchema` + structured content + tool annotations | A4 |
 | ⬜ | **F3-09** | **Elicitation** — tools can ask the user for missing input mid-execution | — |
@@ -320,10 +320,10 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Connects to a real MCP client | ❌ No | ✅ **Yes** — SDK client, real subprocess | ✅ Yes |
 | Protocol revision | `2025-03-26` | negotiated by the SDK | current stable, via SDK |
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
-| MCP capabilities served | tools only | tools + resources + prompts + completion | tools + resources + prompts + logging + completion |
+| MCP capabilities served | tools only | tools + resources + prompts + completion + logging | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 4 | 12+ |
-| Test cases | 69 | 130 | 200+ |
-| Integration tests (real client ↔ real server) | 0 | **55** | grows with each phase |
+| Test cases | 69 | 136 | 200+ |
+| Integration tests (real client ↔ real server) | 0 | **61** | grows with each phase |
 | Line coverage | not measured | **70.1%** (branch 57.2%) | ≥ 80% |
 | Projects under test | 2 / 3 | **4 / 4** | all |
 | Build warnings | not enforced | **0, enforced** | 0, enforced |
@@ -403,6 +403,11 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-08-02 | `F2-08`'s coverage work was spent on real gaps, not on the percentage | The tools' own contract had nothing behind it: the character cap, the out-of-range clamp, the missing-file message and append-versus-overwrite were only smoke-tested through interop. Those tests moved the Server package from 65.0% to 82.2% as a side effect. `AgentHostedService` was added for the same reason — it owns the shutdown path `F2-06` changed and had no test at all. |
 | 2026-08-03 | **`F3-01` and `F3-02` landed as one commit** | The template reuses the containment and file access the listing added, in the same file. Split, the first commit would ship a provider with a method nothing calls. The commit body names both ids. |
 | 2026-08-03 | **The spec deleted `resources/subscribe` while `F3-03` was being written** | The `2026-07-28` revision (SEP-2575) replaced it with `subscriptions/listen`, and the SDK server refuses the old method on that revision: *"The method 'resources/subscribe' is not available on protocol version '2026-07-28'."* Found by an interop test failing, not by reading a changelog. This is PRD §4's spec-velocity argument arriving in the working tree, six days after the audit that made it. |
+| 2026-08-03 | **The 2026-07-28 revision deprecates Roots, Sampling and Logging (SEP-2577), and `F3-06` and `F3-10` target two of them** | Surfaced as a build failure, not a warning: `MCP9005` under `TreatWarningsAsErrors`. Decision taken with the project owner — implement both, suppress narrowly, document. Deprecated is not removed, every shipping client negotiates a revision where both work, and the alternative loses real capability for a revision no client speaks yet. The suppressions are file-scoped in `ClientLogBridge` (the whole type exists for that one feature) and single-line elsewhere, each naming SEP-2577, so a future reader deletes the right things when the SDK removes them. |
+| 2026-08-03 | Logging implemented rather than skipped, because the SDK advertises the capability whether or not the server honours it | `McpServerImpl.ConfigureLogging` sets `ServerCapabilities.Logging = new()` unconditionally. Skipping `F3-06` would not have produced a server without logging; it would have produced one that advertises logging and never sends a message. Same reasoning as `listChanged` in `F3-03`, arrived at from the opposite direction. |
+| 2026-08-03 | `logging/setLevel` is also gone on `2026-07-28`, replaced by a per-request `_meta/io.modelcontextprotocol/logLevel` field | Second instance of the same pattern as `resources/subscribe`, found the same way. The bridge learns which session to write to from the `setLevel` request itself, so on the newer revision it is never attached and no messages flow. Chasing the per-request field would mean a request filter feeding a mechanism the SDK client cannot currently drive — the same speculative work declined for subscriptions. Pinned by `Setting_a_level_is_refused_on_the_revision_that_removed_the_method`. |
+| 2026-08-03 | Only `DotNetMcpServer.*` log categories are mirrored to the client | Forwarding the SDK's own categories does not merely add noise: sending a notification writes a log line, which would be sent, which writes a log line. The filter is what makes the bridge terminate. stderr still receives everything. |
+| 2026-08-03 | The tools take `ILoggerFactory` and name their category as a constant, rather than taking `ILogger<T>` | A static class cannot be a type argument, so `ILogger<WorkspaceTools>` does not compile, and borrowing an unrelated type's name would put that name on every `notifications/message` the client sees. The category is part of the protocol surface here, so it is written down. |
 | 2026-08-03 | Per-resource subscriptions ship for `2025-11-25` and earlier; on `2026-07-28` only `list_changed` flows | Under SEP-2575 the SDK owns the subscription list and exposes no server-side hook — `_activeSubscriptions` is private and `SubscribeToResourcesHandler` is never invoked, confirmed in `McpServerImpl`. A server on that revision cannot learn which URIs a client follows through the public API. Reaching it would mean a message filter peeking at raw `subscriptions/listen` frames, for a path no SDK client can currently send — the client convenience API still emits the removed method. Building that would be writing to an interface nothing implements. Recorded instead, with `Subscribing_is_refused_on_the_revision_that_removed_the_method` pinning the boundary as an executable fact. Revisit when the SDK client gains a `subscriptions/listen` API. |
 | 2026-08-03 | `notifications/resources/list_changed` implemented alongside `F3-03`, which asked only for subscriptions | The `FileSystemWatcher` the task requires already sees files appear and disappear. Advertising `resources` without `listChanged` while the server demonstrably knows the list changed would be a capability declared false out of laziness rather than design. The watcher starts on the first `resources/list` or `resources/subscribe`, so a session that only calls tools never watches the filesystem. |
 | 2026-08-02 | A test asserting that a missing `openAI:model` fails validation was wrong and was rewritten | `Model` has a default of `gpt-4o-mini`, so `[Required]` is satisfied and no failure occurs. Unlike `ApiKey`, which has no default, a missing model is not a configuration error. The test now pins the fallback instead. Recorded because the failure came from the test's premise, not the code. |
