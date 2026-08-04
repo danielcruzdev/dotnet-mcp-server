@@ -15,7 +15,8 @@ public sealed class SdkServerInteropTests : IAsyncLifetime
         "append_study_note",
         "calculate_expression",
         "get_current_datetime",
-        "read_text_file"
+        "read_text_file",
+        "scan_workspace"
     ];
 
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), "mcp-interop-" + Guid.NewGuid().ToString("N"));

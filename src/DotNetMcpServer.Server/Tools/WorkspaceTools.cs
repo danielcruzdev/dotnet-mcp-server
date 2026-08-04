@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
+using DotNetMcpServer.Server.Resources;
 using DotNetMcpServer.Server.Workspace;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
@@ -99,6 +100,66 @@ public static partial class WorkspaceTools
         LogNoteAppended(logger, notesFile);
 
         return $"Note saved to: {notesFile}";
+    }
+
+    [McpServerTool(Name = "scan_workspace")]
+    [Description("Walks every text document in the workspace and reports totals: documents, lines, characters.")]
+    public static async Task<string> ScanWorkspace(
+        WorkspaceResourceProvider provider,
+        IProgress<ProgressNotificationValue> progress,
+        CancellationToken cancellationToken)
+    {
+        var documents = provider.EnumerateDocuments();
+        var lines = 0L;
+        var characters = 0L;
+
+        for (var index = 0; index < documents.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var content = await provider.TryReadAsync(
+                WorkspaceResourceProvider.ToUri(documents[index]),
+                cancellationToken).ConfigureAwait(false);
+
+            if (content is not null)
+            {
+                lines += CountLines(content.Text);
+                characters += content.Text.Length;
+            }
+
+            // Reported after the work, so the count is what has been done rather than what is
+            // about to be. The SDK drops these unless the client sent a progress token.
+            progress.Report(new ProgressNotificationValue
+            {
+                Progress = index + 1,
+                Total = documents.Count,
+                Message = documents[index]
+            });
+        }
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"Documents: {documents.Count}\nLines: {lines}\nCharacters: {characters}");
+    }
+
+    private static int CountLines(string text)
+    {
+        if (text.Length == 0)
+        {
+            return 0;
+        }
+
+        var lines = 1;
+
+        foreach (var character in text)
+        {
+            if (character == '\n')
+            {
+                lines++;
+            }
+        }
+
+        return lines;
     }
 
     // A client that turned logging up asked to see what the server is doing on its behalf.

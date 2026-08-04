@@ -10,11 +10,11 @@
 **Phase 2 — Modern .NET Architecture** ✅ complete · **Phase 3 — Full MCP Surface via SDK** 🟦 in progress
 
 ```
-Overall   ███████░░░░░░░░░░░░░  29 / 80 tasks   (36%)
+Overall   ████████░░░░░░░░░░░░  30 / 80 tasks   (38%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
 Phase 2   ████████████████████   9 / 9   ✅ complete
-Phase 3   ████████████░░░░░░░░   6 / 10
+Phase 3   ██████████████░░░░░░   7 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 Phase 6   ░░░░░░░░░░░░░░░░░░░░   0 / 10
@@ -22,8 +22,9 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 3 — `F3-07`, progress notifications. Needs a tool that runs long enough
-to have something to report; the resource walker is the natural candidate.
+**Next action:** Phase 3 — `F3-08`, `outputSchema` and tool annotations, then elicitation and
+sampling. `scan_workspace` already returns counts that want to be a record rather than a
+string.
 
 **Phase 2 outcome:** the agent is a hosted, injected, validated, observable application, and
 every project reports coverage — **70.1%**, against a 60% bar. The two findings that mattered
@@ -160,7 +161,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ✅ | **F3-04** | `prompts/list` + `prompts/get` with arguments | A4 |
 | ✅ | **F3-05** | `completion/complete` for prompt and resource arguments | A4 |
 | ✅ | **F3-06** | `logging/setLevel` + log notifications | A4 |
-| ⬜ | **F3-07** | Progress notifications for long-running tools | A4 |
+| ✅ | **F3-07** | Progress notifications for long-running tools | A4 |
 | ⬜ | **F3-08** | `outputSchema` + structured content + tool annotations | A4 |
 | ⬜ | **F3-09** | **Elicitation** — tools can ask the user for missing input mid-execution | — |
 | ⬜ | **F3-10** | **Sampling** — the server can request an LLM completion from the client | — |
@@ -171,7 +172,8 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
       on `2025-11-25`, the last revision that has `resources/subscribe`. On `2026-07-28` the
       method is gone and per-resource updates do not flow; `notifications/resources/list_changed`
       works on both. See the decision log entry for 2026-08-03
-- [ ] A long-running tool reports progress visible in the client
+- [x] **A long-running tool reports progress visible in the client** — `scan_workspace`, one
+      report per document, asserted over a real client
 - [ ] An elicitation round-trip completes against a real client
 - [ ] Every advertised capability is exercised by a test
 
@@ -321,9 +323,9 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Protocol revision | `2025-03-26` | negotiated by the SDK | current stable, via SDK |
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
 | MCP capabilities served | tools only | tools + resources + prompts + completion + logging | tools + resources + prompts + logging + completion |
-| MCP tools exposed | 4 | 4 | 12+ |
-| Test cases | 69 | 136 | 200+ |
-| Integration tests (real client ↔ real server) | 0 | **61** | grows with each phase |
+| MCP tools exposed | 4 | 5 | 12+ |
+| Test cases | 69 | 138 | 200+ |
+| Integration tests (real client ↔ real server) | 0 | **63** | grows with each phase |
 | Line coverage | not measured | **70.1%** (branch 57.2%) | ≥ 80% |
 | Projects under test | 2 / 3 | **4 / 4** | all |
 | Build warnings | not enforced | **0, enforced** | 0, enforced |
@@ -403,6 +405,9 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-08-02 | `F2-08`'s coverage work was spent on real gaps, not on the percentage | The tools' own contract had nothing behind it: the character cap, the out-of-range clamp, the missing-file message and append-versus-overwrite were only smoke-tested through interop. Those tests moved the Server package from 65.0% to 82.2% as a side effect. `AgentHostedService` was added for the same reason — it owns the shutdown path `F2-06` changed and had no test at all. |
 | 2026-08-03 | **`F3-01` and `F3-02` landed as one commit** | The template reuses the containment and file access the listing added, in the same file. Split, the first commit would ship a provider with a method nothing calls. The commit body names both ids. |
 | 2026-08-03 | **The spec deleted `resources/subscribe` while `F3-03` was being written** | The `2026-07-28` revision (SEP-2575) replaced it with `subscriptions/listen`, and the SDK server refuses the old method on that revision: *"The method 'resources/subscribe' is not available on protocol version '2026-07-28'."* Found by an interop test failing, not by reading a changelog. This is PRD §4's spec-velocity argument arriving in the working tree, six days after the audit that made it. |
+| 2026-08-03 | **`F3-07` needed a long-running tool, so `scan_workspace` was added — a fifth tool outside the Phase 5 list** | Progress notifications cannot be demonstrated by four tools that each return in a millisecond. The tool walks the resource provider's document list, which already existed, and reports one step per document, so it is roughly thirty lines rather than a new capability. It does not pre-empt any Phase 5 task: `list_directory`, `write_text_file` and `search_files` are all still unwritten. |
+| 2026-08-03 | The last progress report of a run is expected to be dropped, and the test says so | The final report is issued immediately before the tool returns, and the response overtakes it — the SDK stops routing notifications for a request once that request is answered. Reporting *before* each document instead would deliver the last notification but never report the run as complete, which is worse. The test asserts `n-1` reports rather than pretending the race is not there. |
+| 2026-08-03 | Progress reports are asserted as a set, not a sequence | They arrive out of order at the client: `Progress<T>` re-dispatches each callback onto the thread pool. Ordering is not something the server can be held to through that, so the test asserts distinct, in-range steps with the right total. It also collects them through its own `IProgress<T>` — `Progress<T>` would have appended to a list from several threads at once. |
 | 2026-08-03 | **The 2026-07-28 revision deprecates Roots, Sampling and Logging (SEP-2577), and `F3-06` and `F3-10` target two of them** | Surfaced as a build failure, not a warning: `MCP9005` under `TreatWarningsAsErrors`. Decision taken with the project owner — implement both, suppress narrowly, document. Deprecated is not removed, every shipping client negotiates a revision where both work, and the alternative loses real capability for a revision no client speaks yet. The suppressions are file-scoped in `ClientLogBridge` (the whole type exists for that one feature) and single-line elsewhere, each naming SEP-2577, so a future reader deletes the right things when the SDK removes them. |
 | 2026-08-03 | Logging implemented rather than skipped, because the SDK advertises the capability whether or not the server honours it | `McpServerImpl.ConfigureLogging` sets `ServerCapabilities.Logging = new()` unconditionally. Skipping `F3-06` would not have produced a server without logging; it would have produced one that advertises logging and never sends a message. Same reasoning as `listChanged` in `F3-03`, arrived at from the opposite direction. |
 | 2026-08-03 | `logging/setLevel` is also gone on `2026-07-28`, replaced by a per-request `_meta/io.modelcontextprotocol/logLevel` field | Second instance of the same pattern as `resources/subscribe`, found the same way. The bridge learns which session to write to from the `setLevel` request itself, so on the newer revision it is never attached and no messages flow. Chasing the per-request field would mean a request filter feeding a mechanism the SDK client cannot currently drive — the same speculative work declined for subscriptions. Pinned by `Setting_a_level_is_refused_on_the_revision_that_removed_the_method`. |
