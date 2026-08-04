@@ -86,9 +86,31 @@ public static partial class WorkspaceTools
     public static async Task<string> AppendStudyNote(
         WorkspaceContext workspace,
         ILoggerFactory loggerFactory,
+        McpServer server,
         [Description("The note body.")] string note,
-        [Description("Optional note title.")] string? title = null,
+        [Description("Note title. If omitted, the server asks the user for one.")] string? title = null,
         CancellationToken cancellationToken = default)
+    {
+        // Asking for a title for a note that is about to be rejected would be rude, so the
+        // note is checked here even though AppendNoteAsync owns the guard.
+        if (!string.IsNullOrWhiteSpace(note) && string.IsNullOrWhiteSpace(title))
+        {
+            title = await AskForTitleAsync(server, cancellationToken).ConfigureAwait(false);
+        }
+
+        return await AppendNoteAsync(workspace, loggerFactory, note, title, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Writes the note. Separated from the MCP surface because the surface now needs an
+    /// <see cref="McpServer"/> to ask the user a question, and a test cannot conjure one.
+    /// </summary>
+    internal static async Task<string> AppendNoteAsync(
+        WorkspaceContext workspace,
+        ILoggerFactory loggerFactory,
+        string note,
+        string? title,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(note))
         {
@@ -150,6 +172,31 @@ public static partial class WorkspaceTools
         return new WorkspaceScan(documents.Count, lines, characters);
     }
 
+    /// <summary>
+    /// Asks the user, through the client, for the title the call did not supply.
+    /// </summary>
+    /// <remarks>
+    /// Elicitation is a client capability, not a given: a client that does not offer it gets
+    /// the default title rather than an error. A tool that only works in front of a human is
+    /// a tool that fails in every automated caller.
+    /// </remarks>
+    /// <returns>The title the user gave, or <see langword="null"/> to fall back.</returns>
+    private static async Task<string?> AskForTitleAsync(McpServer server, CancellationToken cancellationToken)
+    {
+        if (server.ClientCapabilities?.Elicitation is null)
+        {
+            return null;
+        }
+
+        var response = await server
+            .ElicitAsync<NoteTitle>("What should this note be called?", cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        // Declining is an answer. The note is still saved, under the default title — losing
+        // the note because the user did not want to name it would be the wrong trade.
+        return response.IsAccepted ? response.Content?.Title : null;
+    }
+
     private static int CountLines(string text)
     {
         if (text.Length == 0)
@@ -195,6 +242,20 @@ public static partial class WorkspaceTools
 
         return builder.ToString();
     }
+}
+
+/// <summary>
+/// The shape <c>append_study_note</c> elicits when it was called without a title.
+/// </summary>
+/// <remarks>
+/// Elicitation schemas are a constrained subset of JSON Schema — strings, numbers, booleans
+/// and string enums only — so this stays one flat string. The SDK builds the schema from the
+/// public properties of this type.
+/// </remarks>
+public sealed class NoteTitle
+{
+    [Description("A short title for the note.")]
+    public string? Title { get; set; }
 }
 
 /// <summary>What <c>scan_workspace</c> counted.</summary>

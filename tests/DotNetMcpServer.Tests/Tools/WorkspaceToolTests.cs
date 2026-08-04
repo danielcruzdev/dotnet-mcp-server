@@ -116,8 +116,8 @@ public sealed class WorkspaceToolTests : IDisposable
     {
         Assert.False(Directory.Exists(Path.Combine(_root, "notes")));
 
-        await WorkspaceTools.AppendStudyNote(_workspace, NullLoggerFactory.Instance, "First note.", "One");
-        await WorkspaceTools.AppendStudyNote(_workspace, NullLoggerFactory.Instance, "Second note.", "Two");
+        await WorkspaceTools.AppendNoteAsync(_workspace, NullLoggerFactory.Instance, "First note.", "One", CancellationToken.None);
+        await WorkspaceTools.AppendNoteAsync(_workspace, NullLoggerFactory.Instance, "Second note.", "Two", CancellationToken.None);
 
         var notes = await File.ReadAllTextAsync(Path.Combine(_root, "notes", "study-notes.md"));
 
@@ -134,6 +134,6 @@ public sealed class WorkspaceToolTests : IDisposable
     [InlineData("   ")]
     public async Task AppendStudyNote_requires_a_note(string note)
     {
-        await Assert.ThrowsAsync<McpException>(() => WorkspaceTools.AppendStudyNote(_workspace, NullLoggerFactory.Instance, note));
+        await Assert.ThrowsAsync<McpException>(() => WorkspaceTools.AppendNoteAsync(_workspace, NullLoggerFactory.Instance, note, title: null, CancellationToken.None));
     }
 }

@@ -91,9 +91,15 @@ public sealed class ProgressInteropTests : IAsyncLifetime
         Assert.Contains($"\"documents\":{DocumentCount}", TextOf(result), StringComparison.Ordinal);
     }
 
+    /// <remarks>
+    /// Generous on purpose. The SDK dispatches notification handlers without waiting for them,
+    /// so the reports can still be running when the tool call returns — and the whole suite
+    /// runs several server subprocesses at once, which makes that gap wider than it looks on
+    /// an idle machine.
+    /// </remarks>
     private static async Task WaitForAsync(Func<bool> condition, Func<string> describe)
     {
-        for (var attempt = 0; attempt < 100 && !condition(); attempt++)
+        for (var attempt = 0; attempt < 400 && !condition(); attempt++)
         {
             await Task.Delay(50);
         }

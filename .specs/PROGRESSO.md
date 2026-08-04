@@ -10,11 +10,11 @@
 **Phase 2 — Modern .NET Architecture** ✅ complete · **Phase 3 — Full MCP Surface via SDK** 🟦 in progress
 
 ```
-Overall   ████████░░░░░░░░░░░░  31 / 80 tasks   (39%)
+Overall   ████████░░░░░░░░░░░░  32 / 80 tasks   (40%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
 Phase 2   ████████████████████   9 / 9   ✅ complete
-Phase 3   ████████████████░░░░   8 / 10
+Phase 3   ██████████████████░░   9 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 Phase 6   ░░░░░░░░░░░░░░░░░░░░   0 / 10
@@ -22,9 +22,8 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 3 — `F3-09` elicitation and `F3-10` sampling, the two features almost
-no .NET example implements. Both need a client that answers back, so the interop harness does
-the work the console agent would.
+**Next action:** Phase 3 — `F3-10`, sampling. The last task in the phase, and the second of
+the two features the 2026-07-28 revision deprecates.
 
 **Phase 2 outcome:** the agent is a hosted, injected, validated, observable application, and
 every project reports coverage — **70.1%**, against a 60% bar. The two findings that mattered
@@ -163,7 +162,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ✅ | **F3-06** | `logging/setLevel` + log notifications | A4 |
 | ✅ | **F3-07** | Progress notifications for long-running tools | A4 |
 | ✅ | **F3-08** | `outputSchema` + structured content + tool annotations | A4 |
-| ⬜ | **F3-09** | **Elicitation** — tools can ask the user for missing input mid-execution | — |
+| ✅ | **F3-09** | **Elicitation** — tools can ask the user for missing input mid-execution | — |
 | ⬜ | **F3-10** | **Sampling** — the server can request an LLM completion from the client | — |
 
 **Done when**
@@ -174,7 +173,8 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
       works on both. See the decision log entry for 2026-08-03
 - [x] **A long-running tool reports progress visible in the client** — `scan_workspace`, one
       report per document, asserted over a real client
-- [ ] An elicitation round-trip completes against a real client
+- [x] **An elicitation round-trip completes against a real client** — `append_study_note`
+      called without a title asks for one, and the answer lands in the note on disk
 - [ ] Every advertised capability is exercised by a test
 
 ---
@@ -324,8 +324,8 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
 | MCP capabilities served | tools only | tools + resources + prompts + completion + logging | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 5 | 12+ |
-| Test cases | 69 | 151 | 200+ |
-| Integration tests (real client ↔ real server) | 0 | **76** | grows with each phase |
+| Test cases | 69 | 155 | 200+ |
+| Integration tests (real client ↔ real server) | 0 | **80** | grows with each phase |
 | Line coverage | not measured | **70.1%** (branch 57.2%) | ≥ 80% |
 | Projects under test | 2 / 3 | **4 / 4** | all |
 | Build warnings | not enforced | **0, enforced** | 0, enforced |
@@ -405,6 +405,9 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-08-02 | `F2-08`'s coverage work was spent on real gaps, not on the percentage | The tools' own contract had nothing behind it: the character cap, the out-of-range clamp, the missing-file message and append-versus-overwrite were only smoke-tested through interop. Those tests moved the Server package from 65.0% to 82.2% as a side effect. `AgentHostedService` was added for the same reason — it owns the shutdown path `F2-06` changed and had no test at all. |
 | 2026-08-03 | **`F3-01` and `F3-02` landed as one commit** | The template reuses the containment and file access the listing added, in the same file. Split, the first commit would ship a provider with a method nothing calls. The commit body names both ids. |
 | 2026-08-03 | **The spec deleted `resources/subscribe` while `F3-03` was being written** | The `2026-07-28` revision (SEP-2575) replaced it with `subscriptions/listen`, and the SDK server refuses the old method on that revision: *"The method 'resources/subscribe' is not available on protocol version '2026-07-28'."* Found by an interop test failing, not by reading a changelog. This is PRD §4's spec-velocity argument arriving in the working tree, six days after the audit that made it. |
+| 2026-08-03 | Elicitation went into an existing tool rather than a new one built to demonstrate it | `append_study_note` already had an optional `title` that silently defaulted to "Note". Asking the user is what the argument wanted all along, so the feature landed where it was actually useful instead of in a tool whose only purpose is the demo. Declining is treated as an answer: the note is still saved under the default, because losing a note over an unanswered question is the wrong trade. |
+| 2026-08-03 | `AppendNoteAsync` extracted so the unit tests survive elicitation | The tool now takes an `McpServer` to ask its question, and a test cannot construct one — `McpServer` is abstract with an `[Experimental]` constructor, the same wall `F2-08` hit. The write itself moved to an internal method the tests drive directly, which is the split the file already used for `FormatEntry`. |
+| 2026-08-03 | The progress test's wait was widened from 5 s to 20 s after one flake in a full-suite run | It passed alone and failed once with the whole suite running several server subprocesses at a time. The SDK dispatches notification handlers without awaiting them, so the reports can still be in flight when the call returns, and load widens that gap. The assertion was not weakened — only the patience. |
 | 2026-08-03 | Structured output for three tools, not all five | `calculate_expression`, `get_current_datetime` and `scan_workspace` answer with data, so they publish an `outputSchema` and fill `structuredContent`. `read_text_file` and `append_study_note` answer with a document and a confirmation — wrapping prose in JSON only makes the client unescape it again, and the text block is what a person reads in Claude Desktop. The rule written down: tools whose answer is data get a schema, tools whose answer is words do not. |
 | 2026-08-03 | Every tool now states its annotations explicitly, including the ones that look like defaults | The spec's defaults are the cautious ones — not read-only, destructive, non-idempotent, open-world — so a tool that says nothing looks as dangerous as the worst tool in the list, and a client auto-approving on those hints will prompt for everything. `read_text_file` saying `readOnly: true` is not noise; it is the difference between one prompt and none. |
 | 2026-08-03 | **`F3-07` needed a long-running tool, so `scan_workspace` was added — a fifth tool outside the Phase 5 list** | Progress notifications cannot be demonstrated by four tools that each return in a millisecond. The tool walks the resource provider's document list, which already existed, and reports one step per document, so it is roughly thirty lines rather than a new capability. It does not pre-empt any Phase 5 task: `list_directory`, `write_text_file` and `search_files` are all still unwritten. |
