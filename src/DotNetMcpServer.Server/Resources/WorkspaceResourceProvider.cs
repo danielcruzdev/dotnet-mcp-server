@@ -111,10 +111,7 @@ public sealed class WorkspaceResourceProvider
 
             foreach (var subdirectory in SafeEntries(directory, files: false))
             {
-                var name = Path.GetFileName(subdirectory);
-
-                // Dot-directories cover .git, .vs, .idea and friends without naming each.
-                if (!name.StartsWith('.') && !ExcludedDirectories.Contains(name))
+                if (!IsExcludedDirectory(Path.GetFileName(subdirectory)))
                 {
                     pending.Push(subdirectory);
                 }
@@ -234,6 +231,23 @@ public sealed class WorkspaceResourceProvider
         return relativePath.Length > 0;
     }
 
+    /// <summary>
+    /// Whether a workspace-relative path is one of the documents this server exposes — the
+    /// same rule <see cref="EnumerateDocuments"/> applies while walking, asked of a single
+    /// path instead. The filesystem watcher uses it to ignore changes nobody can subscribe to.
+    /// </summary>
+    public static bool IsDocument(string relativePath)
+    {
+        if (!MimeTypesByExtension.ContainsKey(Path.GetExtension(relativePath)))
+        {
+            return false;
+        }
+
+        var segments = relativePath.Split('/');
+
+        return !segments[..^1].Any(IsExcludedDirectory);
+    }
+
     /// <summary>The MIME type advertised for a document, by extension.</summary>
     public static string MimeTypeFor(string relativePath)
     {
@@ -299,6 +313,15 @@ public sealed class WorkspaceResourceProvider
             MimeType = MimeTypeFor(relativePath),
             Size = file.Exists ? file.Length : null
         };
+    }
+
+    /// <summary>
+    /// Build output and dot-directories are skipped whether they are met while walking or
+    /// reported by the watcher, so the rule lives in one place.
+    /// </summary>
+    private static bool IsExcludedDirectory(string name)
+    {
+        return name.StartsWith('.') || ExcludedDirectories.Contains(name);
     }
 
     private string ToRelativePath(string absolutePath)

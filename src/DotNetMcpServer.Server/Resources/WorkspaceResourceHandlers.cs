@@ -19,31 +19,57 @@ internal static class WorkspaceResourceHandlers
         RequestContext<ListResourcesRequestParams> request,
         CancellationToken cancellationToken)
     {
-        var provider = Provider(request);
+        // The client has shown interest in the resource list, so start watching for changes
+        // to it — this is what makes the advertised listChanged capability true.
+        Service<WorkspaceResourceSubscriptions>(request).EnsureWatching(request.Server);
 
-        return ValueTask.FromResult(provider.ListPage(request.Params?.Cursor));
+        return ValueTask.FromResult(Service<WorkspaceResourceProvider>(request).ListPage(request.Params?.Cursor));
+    }
+
+    public static ValueTask<EmptyResult> SubscribeAsync(
+        RequestContext<SubscribeRequestParams> request,
+        CancellationToken cancellationToken)
+    {
+        Service<WorkspaceResourceSubscriptions>(request).Subscribe(request.Server, RequiredUri(request.Params?.Uri));
+
+        return ValueTask.FromResult(new EmptyResult());
+    }
+
+    public static ValueTask<EmptyResult> UnsubscribeAsync(
+        RequestContext<UnsubscribeRequestParams> request,
+        CancellationToken cancellationToken)
+    {
+        Service<WorkspaceResourceSubscriptions>(request).Unsubscribe(RequiredUri(request.Params?.Uri));
+
+        return ValueTask.FromResult(new EmptyResult());
     }
 
     public static async ValueTask<ReadResourceResult> ReadResourceAsync(
         RequestContext<ReadResourceRequestParams> request,
         CancellationToken cancellationToken)
     {
-        var uri = request.Params?.Uri;
+        var uri = RequiredUri(request.Params?.Uri);
 
-        if (string.IsNullOrWhiteSpace(uri))
-        {
-            throw new McpProtocolException("'uri' is required.", McpErrorCode.InvalidParams);
-        }
-
-        var contents = await Provider(request).TryReadAsync(uri, cancellationToken).ConfigureAwait(false)
+        var contents = await Service<WorkspaceResourceProvider>(request)
+                .TryReadAsync(uri, cancellationToken).ConfigureAwait(false)
             ?? throw new McpProtocolException($"Unknown resource URI: {uri}", McpErrorCode.InvalidParams);
 
         return new ReadResourceResult { Contents = [contents] };
     }
 
-    private static WorkspaceResourceProvider Provider<TParams>(RequestContext<TParams> request)
+    private static string RequiredUri(string? uri)
     {
-        return request.Services?.GetRequiredService<WorkspaceResourceProvider>()
+        return string.IsNullOrWhiteSpace(uri)
+            ? throw new McpProtocolException("'uri' is required.", McpErrorCode.InvalidParams)
+            : uri;
+    }
+
+    private static TService Service<TService>(MessageContext request)
+        where TService : notnull
+    {
+        var services = request.Services
             ?? throw new InvalidOperationException("The request has no service provider.");
+
+        return services.GetRequiredService<TService>();
     }
 }

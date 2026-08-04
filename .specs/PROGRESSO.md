@@ -10,11 +10,11 @@
 **Phase 2 — Modern .NET Architecture** ✅ complete · **Phase 3 — Full MCP Surface via SDK** 🟦 in progress
 
 ```
-Overall   ██████░░░░░░░░░░░░░░  25 / 80 tasks   (31%)
+Overall   ██████░░░░░░░░░░░░░░  26 / 80 tasks   (33%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
 Phase 2   ████████████████████   9 / 9   ✅ complete
-Phase 3   ████░░░░░░░░░░░░░░░░   2 / 10
+Phase 3   ██████░░░░░░░░░░░░░░   3 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 Phase 6   ░░░░░░░░░░░░░░░░░░░░   0 / 10
@@ -22,9 +22,8 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 3 — `F3-03`, `resources/subscribe` backed by a `FileSystemWatcher`.
-`WorkspaceResourceProvider` already maps between workspace paths and resource URIs, so the
-watcher only has to decide which changes are worth a notification.
+**Next action:** Phase 3 — `F3-04`, `prompts/list` + `prompts/get`. Prompts are attributed
+methods on the SDK, so the work is choosing templates worth having rather than wiring.
 
 **Phase 2 outcome:** the agent is a hosted, injected, validated, observable application, and
 every project reports coverage — **70.1%**, against a 60% bar. The two findings that mattered
@@ -157,7 +156,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 |:---:|---|---|---|
 | ✅ | **F3-01** | `resources/list` + `resources/read` | A4 |
 | ✅ | **F3-02** | Resource templates (RFC 6570 URI templates) | A4 |
-| ⬜ | **F3-03** | `resources/subscribe` + update notifications via `FileSystemWatcher` | A4 |
+| ✅ | **F3-03** | `resources/subscribe` + update notifications via `FileSystemWatcher` | A4 |
 | ⬜ | **F3-04** | `prompts/list` + `prompts/get` with arguments | A4 |
 | ⬜ | **F3-05** | `completion/complete` for prompt and resource arguments | A4 |
 | ⬜ | **F3-06** | `logging/setLevel` + log notifications | A4 |
@@ -168,7 +167,10 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 
 **Done when**
 - [ ] Claude Desktop lists resources and prompts alongside tools
-- [ ] Editing a workspace file triggers an update notification the client receives
+- [x] **Editing a workspace file triggers an update notification the client receives** — proven
+      on `2025-11-25`, the last revision that has `resources/subscribe`. On `2026-07-28` the
+      method is gone and per-resource updates do not flow; `notifications/resources/list_changed`
+      works on both. See the decision log entry for 2026-08-03
 - [ ] A long-running tool reports progress visible in the client
 - [ ] An elicitation round-trip completes against a real client
 - [ ] Every advertised capability is exercised by a test
@@ -320,8 +322,8 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
 | MCP capabilities served | tools only | tools + resources | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 4 | 12+ |
-| Test cases | 69 | 108 | 200+ |
-| Integration tests (real client ↔ real server) | 0 | **33** | grows with each phase |
+| Test cases | 69 | 116 | 200+ |
+| Integration tests (real client ↔ real server) | 0 | **41** | grows with each phase |
 | Line coverage | not measured | **70.1%** (branch 57.2%) | ≥ 80% |
 | Projects under test | 2 / 3 | **4 / 4** | all |
 | Build warnings | not enforced | **0, enforced** | 0, enforced |
@@ -399,6 +401,10 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-08-02 | **The first coverage run reported 58.5% and the number was wrong** | Stale assemblies from before the project rename — `PortfolioAgent.Tests.dll` and `PortfolioAgent.Shared.dll`, built in March — were still sitting in `bin/` and the collector instrumented them at 0%. Deleting `bin/` and `obj/` and re-measuring gave 60.1% on identical code. Two lessons kept here: coverage was about to be reported 1.6 points low against a 60% bar, and a clean build is part of measuring anything. `F8-04` should clean before collecting in CI. |
 | 2026-08-02 | Line coverage understates this repository, and the gap is structural | Everything the interop suite exercises runs in a subprocess the collector does not instrument, so all three `Program` entry points and the artifact's conformance tools read as 0% while executing on every run. Chasing them with in-process tests would mean duplicating the interop suite badly. The 70.1% figure is conservative, and the ≥ 80% target in `F8-04` should be set against that, not against a hypothetical instrumented-subprocess number. |
 | 2026-08-02 | `F2-08`'s coverage work was spent on real gaps, not on the percentage | The tools' own contract had nothing behind it: the character cap, the out-of-range clamp, the missing-file message and append-versus-overwrite were only smoke-tested through interop. Those tests moved the Server package from 65.0% to 82.2% as a side effect. `AgentHostedService` was added for the same reason — it owns the shutdown path `F2-06` changed and had no test at all. |
+| 2026-08-03 | **`F3-01` and `F3-02` landed as one commit** | The template reuses the containment and file access the listing added, in the same file. Split, the first commit would ship a provider with a method nothing calls. The commit body names both ids. |
+| 2026-08-03 | **The spec deleted `resources/subscribe` while `F3-03` was being written** | The `2026-07-28` revision (SEP-2575) replaced it with `subscriptions/listen`, and the SDK server refuses the old method on that revision: *"The method 'resources/subscribe' is not available on protocol version '2026-07-28'."* Found by an interop test failing, not by reading a changelog. This is PRD §4's spec-velocity argument arriving in the working tree, six days after the audit that made it. |
+| 2026-08-03 | Per-resource subscriptions ship for `2025-11-25` and earlier; on `2026-07-28` only `list_changed` flows | Under SEP-2575 the SDK owns the subscription list and exposes no server-side hook — `_activeSubscriptions` is private and `SubscribeToResourcesHandler` is never invoked, confirmed in `McpServerImpl`. A server on that revision cannot learn which URIs a client follows through the public API. Reaching it would mean a message filter peeking at raw `subscriptions/listen` frames, for a path no SDK client can currently send — the client convenience API still emits the removed method. Building that would be writing to an interface nothing implements. Recorded instead, with `Subscribing_is_refused_on_the_revision_that_removed_the_method` pinning the boundary as an executable fact. Revisit when the SDK client gains a `subscriptions/listen` API. |
+| 2026-08-03 | `notifications/resources/list_changed` implemented alongside `F3-03`, which asked only for subscriptions | The `FileSystemWatcher` the task requires already sees files appear and disappear. Advertising `resources` without `listChanged` while the server demonstrably knows the list changed would be a capability declared false out of laziness rather than design. The watcher starts on the first `resources/list` or `resources/subscribe`, so a session that only calls tools never watches the filesystem. |
 | 2026-08-02 | A test asserting that a missing `openAI:model` fails validation was wrong and was rewritten | `Model` has a default of `gpt-4o-mini`, so `[Required]` is satisfied and no failure occurs. Unlike `ApiKey`, which has no default, a missing model is not a configuration error. The test now pins the fallback instead. Recorded because the failure came from the test's premise, not the code. |
 
 ---
