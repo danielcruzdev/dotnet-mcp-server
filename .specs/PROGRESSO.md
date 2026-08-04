@@ -157,7 +157,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ✅ | **F3-01** | `resources/list` + `resources/read` | A4 |
 | ✅ | **F3-02** | Resource templates (RFC 6570 URI templates) | A4 |
 | ✅ | **F3-03** | `resources/subscribe` + update notifications via `FileSystemWatcher` | A4 |
-| ⬜ | **F3-04** | `prompts/list` + `prompts/get` with arguments | A4 |
+| ✅ | **F3-04** | `prompts/list` + `prompts/get` with arguments | A4 |
 | ⬜ | **F3-05** | `completion/complete` for prompt and resource arguments | A4 |
 | ⬜ | **F3-06** | `logging/setLevel` + log notifications | A4 |
 | ⬜ | **F3-07** | Progress notifications for long-running tools | A4 |

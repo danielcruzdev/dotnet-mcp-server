@@ -21,6 +21,7 @@ builder.Services
     .WithStdioServerTransport()
     .WithToolsFromAssembly()
     .WithResourcesFromAssembly()
+    .WithPromptsFromAssembly()
     .WithListResourcesHandler(WorkspaceResourceHandlers.ListResourcesAsync)
     .WithReadResourceHandler(WorkspaceResourceHandlers.ReadResourceAsync)
     .WithSubscribeToResourcesHandler(WorkspaceResourceHandlers.SubscribeAsync)
