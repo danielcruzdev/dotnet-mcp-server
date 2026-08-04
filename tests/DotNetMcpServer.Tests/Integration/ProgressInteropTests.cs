@@ -59,7 +59,7 @@ public sealed class ProgressInteropTests : IAsyncLifetime
         var result = await Client.CallToolAsync("scan_workspace", progress: progress);
 
         Assert.NotEqual(true, result.IsError);
-        Assert.Contains($"Documents: {DocumentCount}", TextOf(result), StringComparison.Ordinal);
+        Assert.Contains($"\"documents\":{DocumentCount}", TextOf(result), StringComparison.Ordinal);
 
         // One report short is expected, not flaky. The final report is issued immediately
         // before the tool returns and the response overtakes it: the SDK stops routing
@@ -88,7 +88,7 @@ public sealed class ProgressInteropTests : IAsyncLifetime
         var result = await Client.CallToolAsync("scan_workspace");
 
         Assert.NotEqual(true, result.IsError);
-        Assert.Contains($"Documents: {DocumentCount}", TextOf(result), StringComparison.Ordinal);
+        Assert.Contains($"\"documents\":{DocumentCount}", TextOf(result), StringComparison.Ordinal);
     }
 
     private static async Task WaitForAsync(Func<bool> condition, Func<string> describe)

@@ -19,8 +19,9 @@ public sealed class ToolLogicTests
 
         var result = DateTimeTools.Describe(moment, timezone: null);
 
-        Assert.StartsWith("UTC now:", result, StringComparison.Ordinal);
-        Assert.Contains("2026-07-28", result, StringComparison.Ordinal);
+        Assert.Equal("UTC", result.TimeZone);
+        Assert.StartsWith("2026-07-28T12:00:00", result.Iso8601, StringComparison.Ordinal);
+        Assert.Contains("28 Jul 2026", result.Formatted, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -30,8 +31,11 @@ public sealed class ToolLogicTests
 
         var result = DateTimeTools.Describe(moment, "America/Sao_Paulo");
 
-        Assert.Contains("2026", result, StringComparison.Ordinal);
-        Assert.DoesNotContain("UTC now:", result, StringComparison.Ordinal);
+        Assert.Equal("America/Sao_Paulo", result.TimeZone);
+
+        // Same instant, three hours behind UTC.
+        Assert.StartsWith("2026-07-28T09:00:00", result.Iso8601, StringComparison.Ordinal);
+        Assert.Contains("-03:00", result.Iso8601, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -44,16 +48,17 @@ public sealed class ToolLogicTests
     }
 
     [Theory]
-    [InlineData("1 + 1", "2")]
-    [InlineData("(1200 + 350) / 5", "310")]
-    [InlineData("2 * (3 + 4)", "14")]
-    [InlineData("10 / 4", "2.5")]
-    [InlineData("1200 + 85", "1285")]
-    public void CalculateExpression_evaluates_arithmetic(string expression, string expected)
+    [InlineData("1 + 1", 2)]
+    [InlineData("(1200 + 350) / 5", 310)]
+    [InlineData("2 * (3 + 4)", 14)]
+    [InlineData("10 / 4", 2.5)]
+    [InlineData("1200 + 85", 1285)]
+    public void CalculateExpression_evaluates_arithmetic(string expression, double expected)
     {
         var result = CalculatorTools.Evaluate(expression);
 
-        Assert.Equal($"Result: {expected}", result);
+        Assert.Equal(expression, result.Expression);
+        Assert.Equal((decimal)expected, result.Result);
     }
 
     [Theory]

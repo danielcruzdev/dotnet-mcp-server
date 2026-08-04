@@ -27,7 +27,10 @@ public static partial class WorkspaceTools
     private const int MinimumMaxCharacters = 200;
     private const int MaximumMaxCharacters = 8000;
 
-    [McpServerTool(Name = "read_text_file")]
+    // The annotations are hints a client uses to decide what to auto-approve. Their defaults
+    // are the cautious ones — not read-only, destructive, non-idempotent, open-world — so
+    // saying nothing makes every tool look as dangerous as the worst of them.
+    [McpServerTool(Name = "read_text_file", ReadOnly = true, Idempotent = true, OpenWorld = false)]
     [Description("Reads a text file from inside the project workspace.")]
     public static async Task<string> ReadTextFile(
         WorkspaceContext workspace,
@@ -76,7 +79,9 @@ public static partial class WorkspaceTools
         return builder.ToString();
     }
 
-    [McpServerTool(Name = "append_study_note")]
+    // Writes, but only ever adds: nothing already in the file is lost. Not idempotent — the
+    // same call twice leaves two notes, which is the point of an append tool.
+    [McpServerTool(Name = "append_study_note", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Creates or appends a note in notes/study-notes.md inside the workspace.")]
     public static async Task<string> AppendStudyNote(
         WorkspaceContext workspace,
@@ -102,9 +107,14 @@ public static partial class WorkspaceTools
         return $"Note saved to: {notesFile}";
     }
 
-    [McpServerTool(Name = "scan_workspace")]
+    [McpServerTool(
+        Name = "scan_workspace",
+        ReadOnly = true,
+        Idempotent = true,
+        OpenWorld = false,
+        UseStructuredContent = true)]
     [Description("Walks every text document in the workspace and reports totals: documents, lines, characters.")]
-    public static async Task<string> ScanWorkspace(
+    public static async Task<WorkspaceScan> ScanWorkspace(
         WorkspaceResourceProvider provider,
         IProgress<ProgressNotificationValue> progress,
         CancellationToken cancellationToken)
@@ -137,9 +147,7 @@ public static partial class WorkspaceTools
             });
         }
 
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $"Documents: {documents.Count}\nLines: {lines}\nCharacters: {characters}");
+        return new WorkspaceScan(documents.Count, lines, characters);
     }
 
     private static int CountLines(string text)
@@ -188,3 +196,14 @@ public static partial class WorkspaceTools
         return builder.ToString();
     }
 }
+
+/// <summary>What <c>scan_workspace</c> counted.</summary>
+/// <remarks>
+/// <c>read_text_file</c> and <c>append_study_note</c> deliberately keep returning text: a
+/// document and a confirmation are prose, and wrapping them in JSON only makes a client escape
+/// them again. Tools whose answer is data get a schema; tools whose answer is words do not.
+/// </remarks>
+public sealed record WorkspaceScan(
+    [property: Description("Number of text documents walked.")] int Documents,
+    [property: Description("Total lines across those documents.")] long Lines,
+    [property: Description("Total characters across those documents.")] long Characters);

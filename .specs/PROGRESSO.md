@@ -10,11 +10,11 @@
 **Phase 2 — Modern .NET Architecture** ✅ complete · **Phase 3 — Full MCP Surface via SDK** 🟦 in progress
 
 ```
-Overall   ████████░░░░░░░░░░░░  30 / 80 tasks   (38%)
+Overall   ████████░░░░░░░░░░░░  31 / 80 tasks   (39%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
 Phase 2   ████████████████████   9 / 9   ✅ complete
-Phase 3   ██████████████░░░░░░   7 / 10
+Phase 3   ████████████████░░░░   8 / 10
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 Phase 6   ░░░░░░░░░░░░░░░░░░░░   0 / 10
@@ -22,9 +22,9 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 3 — `F3-08`, `outputSchema` and tool annotations, then elicitation and
-sampling. `scan_workspace` already returns counts that want to be a record rather than a
-string.
+**Next action:** Phase 3 — `F3-09` elicitation and `F3-10` sampling, the two features almost
+no .NET example implements. Both need a client that answers back, so the interop harness does
+the work the console agent would.
 
 **Phase 2 outcome:** the agent is a hosted, injected, validated, observable application, and
 every project reports coverage — **70.1%**, against a 60% bar. The two findings that mattered
@@ -162,7 +162,7 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ✅ | **F3-05** | `completion/complete` for prompt and resource arguments | A4 |
 | ✅ | **F3-06** | `logging/setLevel` + log notifications | A4 |
 | ✅ | **F3-07** | Progress notifications for long-running tools | A4 |
-| ⬜ | **F3-08** | `outputSchema` + structured content + tool annotations | A4 |
+| ✅ | **F3-08** | `outputSchema` + structured content + tool annotations | A4 |
 | ⬜ | **F3-09** | **Elicitation** — tools can ask the user for missing input mid-execution | — |
 | ⬜ | **F3-10** | **Sampling** — the server can request an LLM completion from the client | — |
 
@@ -324,8 +324,8 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
 | MCP capabilities served | tools only | tools + resources + prompts + completion + logging | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 5 | 12+ |
-| Test cases | 69 | 138 | 200+ |
-| Integration tests (real client ↔ real server) | 0 | **63** | grows with each phase |
+| Test cases | 69 | 151 | 200+ |
+| Integration tests (real client ↔ real server) | 0 | **76** | grows with each phase |
 | Line coverage | not measured | **70.1%** (branch 57.2%) | ≥ 80% |
 | Projects under test | 2 / 3 | **4 / 4** | all |
 | Build warnings | not enforced | **0, enforced** | 0, enforced |
@@ -405,6 +405,8 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-08-02 | `F2-08`'s coverage work was spent on real gaps, not on the percentage | The tools' own contract had nothing behind it: the character cap, the out-of-range clamp, the missing-file message and append-versus-overwrite were only smoke-tested through interop. Those tests moved the Server package from 65.0% to 82.2% as a side effect. `AgentHostedService` was added for the same reason — it owns the shutdown path `F2-06` changed and had no test at all. |
 | 2026-08-03 | **`F3-01` and `F3-02` landed as one commit** | The template reuses the containment and file access the listing added, in the same file. Split, the first commit would ship a provider with a method nothing calls. The commit body names both ids. |
 | 2026-08-03 | **The spec deleted `resources/subscribe` while `F3-03` was being written** | The `2026-07-28` revision (SEP-2575) replaced it with `subscriptions/listen`, and the SDK server refuses the old method on that revision: *"The method 'resources/subscribe' is not available on protocol version '2026-07-28'."* Found by an interop test failing, not by reading a changelog. This is PRD §4's spec-velocity argument arriving in the working tree, six days after the audit that made it. |
+| 2026-08-03 | Structured output for three tools, not all five | `calculate_expression`, `get_current_datetime` and `scan_workspace` answer with data, so they publish an `outputSchema` and fill `structuredContent`. `read_text_file` and `append_study_note` answer with a document and a confirmation — wrapping prose in JSON only makes the client unescape it again, and the text block is what a person reads in Claude Desktop. The rule written down: tools whose answer is data get a schema, tools whose answer is words do not. |
+| 2026-08-03 | Every tool now states its annotations explicitly, including the ones that look like defaults | The spec's defaults are the cautious ones — not read-only, destructive, non-idempotent, open-world — so a tool that says nothing looks as dangerous as the worst tool in the list, and a client auto-approving on those hints will prompt for everything. `read_text_file` saying `readOnly: true` is not noise; it is the difference between one prompt and none. |
 | 2026-08-03 | **`F3-07` needed a long-running tool, so `scan_workspace` was added — a fifth tool outside the Phase 5 list** | Progress notifications cannot be demonstrated by four tools that each return in a millisecond. The tool walks the resource provider's document list, which already existed, and reports one step per document, so it is roughly thirty lines rather than a new capability. It does not pre-empt any Phase 5 task: `list_directory`, `write_text_file` and `search_files` are all still unwritten. |
 | 2026-08-03 | The last progress report of a run is expected to be dropped, and the test says so | The final report is issued immediately before the tool returns, and the response overtakes it — the SDK stops routing notifications for a request once that request is answered. Reporting *before* each document instead would deliver the last notification but never report the run as complete, which is worse. The test asserts `n-1` reports rather than pretending the race is not there. |
 | 2026-08-03 | Progress reports are asserted as a set, not a sequence | They arrive out of order at the client: `Progress<T>` re-dispatches each callback onto the thread pool. Ordering is not something the server can be held to through that, so the test asserts distinct, in-range steps with the right total. It also collects them through its own `IProgress<T>` — `Progress<T>` would have appended to a list from several threads at once. |
