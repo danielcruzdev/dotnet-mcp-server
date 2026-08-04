@@ -7,14 +7,14 @@
 
 ## Current status
 
-**Phase 2 — Modern .NET Architecture** ✅ complete · **Phase 3 — Full MCP Surface via SDK** 🟦 in progress
+**Phase 3 — Full MCP Surface via SDK** ✅ complete · **Phase 4 — Streamable HTTP + OAuth 2.1** ⬜ next
 
 ```
-Overall   ████████░░░░░░░░░░░░  32 / 80 tasks   (40%)
+Overall   ████████░░░░░░░░░░░░  33 / 80 tasks   (41%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
 Phase 2   ████████████████████   9 / 9   ✅ complete
-Phase 3   ██████████████████░░   9 / 10
+Phase 3   ████████████████████  10 / 10   ✅ complete
 Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 Phase 6   ░░░░░░░░░░░░░░░░░░░░   0 / 10
@@ -22,8 +22,18 @@ Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 3 — `F3-10`, sampling. The last task in the phase, and the second of
-the two features the 2026-07-28 revision deprecates.
+**Next action:** Phase 4 — `F4-01`, `ModelContextProtocol.AspNetCore` and Streamable HTTP.
+Phase 5 is also unblocked (it only needs Phase 2) and is the one the SDK contributes nothing
+to, so it carries more signal per hour than Phase 4 does.
+
+**Phase 3 outcome:** the server serves every MCP capability, not just tools — resources with
+templates and subscriptions, prompts, completion, logging, progress, structured output,
+elicitation and sampling, each driven by the official client against the real binary. The
+finding that mattered most was not in the task list: **the spec revision the SDK negotiates by
+default has already removed `resources/subscribe` and `logging/setLevel`, and deprecated
+Sampling, Logging and Roots.** Two tasks were half-obsolete before they were written. Both
+were found by an interop test failing, six days after the audit that argued spec velocity was
+the reason to build on the SDK — see the decision log.
 
 **Phase 2 outcome:** the agent is a hosted, injected, validated, observable application, and
 every project reports coverage — **70.1%**, against a 60% bar. The two findings that mattered
@@ -163,10 +173,12 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 | ✅ | **F3-07** | Progress notifications for long-running tools | A4 |
 | ✅ | **F3-08** | `outputSchema` + structured content + tool annotations | A4 |
 | ✅ | **F3-09** | **Elicitation** — tools can ask the user for missing input mid-execution | — |
-| ⬜ | **F3-10** | **Sampling** — the server can request an LLM completion from the client | — |
+| ✅ | **F3-10** | **Sampling** — the server can request an LLM completion from the client | — |
 
 **Done when**
-- [ ] Claude Desktop lists resources and prompts alongside tools
+- [ ] **Claude Desktop lists resources and prompts alongside tools** — the interop suite proves
+      a real client lists both, but nobody has watched the desktop app do it. Owner: Daniel.
+      Same standing item as Phase 1's visual confirmation; evidence for the `F8-07` recording
 - [x] **Editing a workspace file triggers an update notification the client receives** — proven
       on `2025-11-25`, the last revision that has `resources/subscribe`. On `2026-07-28` the
       method is gone and per-resource updates do not flow; `notifications/resources/list_changed`
@@ -175,7 +187,21 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
       report per document, asserted over a real client
 - [x] **An elicitation round-trip completes against a real client** — `append_study_note`
       called without a title asks for one, and the answer lands in the note on disk
-- [ ] Every advertised capability is exercised by a test
+- [x] **Every advertised capability is exercised by a test** — resources (list, read,
+      templates, subscribe, list-changed), prompts, completion, logging, progress, structured
+      output, elicitation and sampling each have interop cases driving the real binary
+
+**What the ✅s do and do not mean:**
+- The phase closed with **two capabilities that the current protocol revision has already
+  moved on from**. `resources/subscribe` and `logging/setLevel` were removed by `2026-07-28`,
+  and Sampling, Logging and Roots are all deprecated by it. Everything works against the
+  revision shipping clients negotiate, and two tests pin each boundary so it cannot move
+  quietly. This is not a footnote on the phase — it is the phase's most useful finding, and
+  the clearest evidence PRD §4's spec-velocity argument was the right one.
+- `F3-03` is ✅ for per-resource updates on `2025-11-25` and earlier only. On `2026-07-28` the
+  SDK owns the subscription list privately and offers no server-side hook, so a server cannot
+  learn which URIs a client follows. Owed work, not hidden work: revisit when the SDK client
+  gains a `subscriptions/listen` API.
 
 ---
 
@@ -322,10 +348,10 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Connects to a real MCP client | ❌ No | ✅ **Yes** — SDK client, real subprocess | ✅ Yes |
 | Protocol revision | `2025-03-26` | negotiated by the SDK | current stable, via SDK |
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
-| MCP capabilities served | tools only | tools + resources + prompts + completion + logging | tools + resources + prompts + logging + completion |
+| MCP capabilities served | tools only | **tools + resources + prompts + completion + logging + progress + elicitation + sampling** | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 5 | 12+ |
-| Test cases | 69 | 155 | 200+ |
-| Integration tests (real client ↔ real server) | 0 | **80** | grows with each phase |
+| Test cases | 69 | 159 | 200+ |
+| Integration tests (real client ↔ real server) | 0 | **84** | grows with each phase |
 | Line coverage | not measured | **70.1%** (branch 57.2%) | ≥ 80% |
 | Projects under test | 2 / 3 | **4 / 4** | all |
 | Build warnings | not enforced | **0, enforced** | 0, enforced |
@@ -405,6 +431,9 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-08-02 | `F2-08`'s coverage work was spent on real gaps, not on the percentage | The tools' own contract had nothing behind it: the character cap, the out-of-range clamp, the missing-file message and append-versus-overwrite were only smoke-tested through interop. Those tests moved the Server package from 65.0% to 82.2% as a side effect. `AgentHostedService` was added for the same reason — it owns the shutdown path `F2-06` changed and had no test at all. |
 | 2026-08-03 | **`F3-01` and `F3-02` landed as one commit** | The template reuses the containment and file access the listing added, in the same file. Split, the first commit would ship a provider with a method nothing calls. The commit body names both ids. |
 | 2026-08-03 | **The spec deleted `resources/subscribe` while `F3-03` was being written** | The `2026-07-28` revision (SEP-2575) replaced it with `subscriptions/listen`, and the SDK server refuses the old method on that revision: *"The method 'resources/subscribe' is not available on protocol version '2026-07-28'."* Found by an interop test failing, not by reading a changelog. This is PRD §4's spec-velocity argument arriving in the working tree, six days after the audit that made it. |
+| 2026-08-03 | Sampling is reached only when elicitation is unavailable, never after a decline | `append_study_note` looks for a title in one order: the user, then the model, then the default. A user who declines to name their note ends the search — asking the model behind their back would not be a fallback, it would be ignoring them. A client that offers neither still gets its note saved. |
+| 2026-08-03 | A model's suggested title is sanitised before it reaches the notes file | The title is written as `## {title}`. A model that answers with two lines, or wraps its answer in quotes, or adds commentary, would corrupt the markdown for every note after it. This is generated content going into a structured document, not a string being logged — first line only, stripped of quote and heading characters, cut to 80. A test drives a deliberately badly-behaved model. |
+| 2026-08-03 | Sampling is deprecated on `2026-07-28` but, unlike subscribe and setLevel, not removed | Its interop tests run on the default revision and pass. So the three SEP-2577 features are in two different states, and the tests record which is which rather than assuming they move together. |
 | 2026-08-03 | Elicitation went into an existing tool rather than a new one built to demonstrate it | `append_study_note` already had an optional `title` that silently defaulted to "Note". Asking the user is what the argument wanted all along, so the feature landed where it was actually useful instead of in a tool whose only purpose is the demo. Declining is treated as an answer: the note is still saved under the default, because losing a note over an unanswered question is the wrong trade. |
 | 2026-08-03 | `AppendNoteAsync` extracted so the unit tests survive elicitation | The tool now takes an `McpServer` to ask its question, and a test cannot construct one — `McpServer` is abstract with an `[Experimental]` constructor, the same wall `F2-08` hit. The write itself moved to an internal method the tests drive directly, which is the split the file already used for `FormatEntry`. |
 | 2026-08-03 | The progress test's wait was widened from 5 s to 20 s after one flake in a full-suite run | It passed alone and failed once with the whole suite running several server subprocesses at a time. The SDK dispatches notification handlers without awaiting them, so the reports can still be in flight when the call returns, and load widens that gap. The assertion was not weakened — only the patience. |

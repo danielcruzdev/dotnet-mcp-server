@@ -5,6 +5,7 @@ using DotNetMcpServer.Server.Resources;
 using DotNetMcpServer.Server.Workspace;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 namespace DotNetMcpServer.Server.Tools;
@@ -22,6 +23,9 @@ public static partial class WorkspaceTools
     /// what a client sees on every notifications/message this server sends.
     /// </summary>
     private const string LogCategory = "DotNetMcpServer.Server.Tools.WorkspaceTools";
+
+    /// <summary>A heading, not a paragraph — what a model suggests is cut to fit.</summary>
+    private const int MaxTitleLength = 80;
 
     private const int DefaultMaxCharacters = 1600;
     private const int MinimumMaxCharacters = 200;
@@ -95,7 +99,7 @@ public static partial class WorkspaceTools
         // note is checked here even though AppendNoteAsync owns the guard.
         if (!string.IsNullOrWhiteSpace(note) && string.IsNullOrWhiteSpace(title))
         {
-            title = await AskForTitleAsync(server, cancellationToken).ConfigureAwait(false);
+            title = await ResolveTitleAsync(server, note, cancellationToken).ConfigureAwait(false);
         }
 
         return await AppendNoteAsync(workspace, loggerFactory, note, title, cancellationToken).ConfigureAwait(false);
@@ -173,28 +177,102 @@ public static partial class WorkspaceTools
     }
 
     /// <summary>
-    /// Asks the user, through the client, for the title the call did not supply.
+    /// Finds a title for a note that arrived without one: the user first, the model second,
+    /// the default last.
     /// </summary>
     /// <remarks>
-    /// Elicitation is a client capability, not a given: a client that does not offer it gets
-    /// the default title rather than an error. A tool that only works in front of a human is
-    /// a tool that fails in every automated caller.
+    /// The order is deliberate. A person who can be asked is the best source; a model that can
+    /// read the note is the next best; neither is required. A tool that only works in front of
+    /// a human fails in every automated caller, and one that needs a model fails wherever the
+    /// client does not lend one.
+    /// <para>
+    /// A user who <em>declines</em> ends the search — asking the model behind the back of
+    /// someone who just refused to name their note would not be a fallback, it would be
+    /// ignoring them.
+    /// </para>
     /// </remarks>
-    /// <returns>The title the user gave, or <see langword="null"/> to fall back.</returns>
-    private static async Task<string?> AskForTitleAsync(McpServer server, CancellationToken cancellationToken)
+    /// <returns>A title, or <see langword="null"/> to use the default.</returns>
+    private static async Task<string?> ResolveTitleAsync(
+        McpServer server,
+        string note,
+        CancellationToken cancellationToken)
     {
-        if (server.ClientCapabilities?.Elicitation is null)
+        if (server.ClientCapabilities?.Elicitation is not null)
+        {
+            var response = await server
+                .ElicitAsync<NoteTitle>("What should this note be called?", cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
+            return response.IsAccepted ? response.Content?.Title : null;
+        }
+
+        return await SuggestTitleAsync(server, note, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Asks the client's model to name the note — the server borrowing inference it does not
+    /// have, rather than shipping a model of its own.
+    /// </summary>
+    /// <returns>A suggested title, or <see langword="null"/> if the client lends no model.</returns>
+    // MCP9005: Sampling is deprecated by specification revision 2026-07-28 (SEP-2577). It is
+    // implemented because it works on every revision a client currently negotiates, and
+    // deprecated is not removed. Scoped to this one method so that when the SDK drops it, the
+    // compiler points at exactly what has to go.
+#pragma warning disable MCP9005
+    private static async Task<string?> SuggestTitleAsync(
+        McpServer server,
+        string note,
+        CancellationToken cancellationToken)
+    {
+        if (server.ClientCapabilities?.Sampling is null)
         {
             return null;
         }
 
-        var response = await server
-            .ElicitAsync<NoteTitle>("What should this note be called?", cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+        var response = await server.SampleAsync(
+            new CreateMessageRequestParams
+            {
+                SystemPrompt =
+                    "You name study notes. Reply with a title of at most six words, and nothing else.",
+                MaxTokens = 32,
+                Temperature = 0.2f,
+                Messages =
+                [
+                    new SamplingMessage
+                    {
+                        Role = Role.User,
+                        Content = [new TextContentBlock { Text = note }]
+                    }
+                ]
+            },
+            cancellationToken).ConfigureAwait(false);
 
-        // Declining is an answer. The note is still saved, under the default title — losing
-        // the note because the user did not want to name it would be the wrong trade.
-        return response.IsAccepted ? response.Content?.Title : null;
+        return SanitizeTitle(string.Concat(response.Content.OfType<TextContentBlock>().Select(block => block.Text)));
+    }
+#pragma warning restore MCP9005
+
+    /// <summary>
+    /// Makes a model's answer safe to use as a markdown heading.
+    /// </summary>
+    /// <remarks>
+    /// The title is written as <c>## {title}</c>. A model that replies with two lines, or wraps
+    /// its answer in quotes, or writes a paragraph, would otherwise corrupt the notes file —
+    /// this is generated content going into a structured document, not a string being logged.
+    /// </remarks>
+    internal static string? SanitizeTitle(string suggestion)
+    {
+        var firstLine = suggestion
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault()?
+            .Trim()
+            .Trim('"', '\'', '#', '*', ' ');
+
+        if (string.IsNullOrWhiteSpace(firstLine))
+        {
+            return null;
+        }
+
+        return firstLine.Length > MaxTitleLength ? firstLine[..MaxTitleLength].TrimEnd() : firstLine;
     }
 
     private static int CountLines(string text)
