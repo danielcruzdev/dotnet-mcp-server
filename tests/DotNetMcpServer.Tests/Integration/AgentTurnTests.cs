@@ -145,7 +145,7 @@ public sealed class AgentTurnTests : IAsyncLifetime
         // The tool really ran against the server subprocess, and its output reached the model.
         var toolMessage = messages.Single(message => message["role"]?.GetValue<string>() == "tool");
         Assert.Equal("get_current_datetime", toolMessage["name"]?.GetValue<string>());
-        Assert.Contains("UTC now:", toolMessage["content"]?.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("\"timeZone\":\"UTC\"", toolMessage["content"]?.GetValue<string>(), StringComparison.Ordinal);
     }
 
     [Fact]

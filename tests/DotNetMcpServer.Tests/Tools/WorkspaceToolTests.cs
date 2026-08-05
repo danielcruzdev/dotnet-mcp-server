@@ -1,5 +1,6 @@
 using DotNetMcpServer.Server.Tools;
 using DotNetMcpServer.Server.Workspace;
+using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol;
 
 namespace DotNetMcpServer.Tests.Tools;
@@ -41,7 +42,7 @@ public sealed class WorkspaceToolTests : IDisposable
     {
         await WriteFileAsync("small.md", "# Title\nBody.\n");
 
-        var result = await WorkspaceTools.ReadTextFile(_workspace, "small.md");
+        var result = await WorkspaceTools.ReadTextFile(_workspace, NullLoggerFactory.Instance, "small.md");
 
         Assert.Contains("Body.", result, StringComparison.Ordinal);
         Assert.DoesNotContain("[content truncated]", result, StringComparison.Ordinal);
@@ -58,7 +59,7 @@ public sealed class WorkspaceToolTests : IDisposable
     {
         await WriteFileAsync("large.md", new string('x', 5000));
 
-        var result = await WorkspaceTools.ReadTextFile(_workspace, "large.md", maxCharacters: 300);
+        var result = await WorkspaceTools.ReadTextFile(_workspace, NullLoggerFactory.Instance, "large.md", maxCharacters: 300);
 
         Assert.Contains("[content truncated]", result, StringComparison.Ordinal);
         Assert.Equal(300, PayloadLength(result));
@@ -75,7 +76,7 @@ public sealed class WorkspaceToolTests : IDisposable
     {
         await WriteFileAsync("large.md", new string('x', 20000));
 
-        var result = await WorkspaceTools.ReadTextFile(_workspace, "large.md", requested);
+        var result = await WorkspaceTools.ReadTextFile(_workspace, NullLoggerFactory.Instance, "large.md", requested);
 
         Assert.Equal(expected, PayloadLength(result));
     }
@@ -84,7 +85,7 @@ public sealed class WorkspaceToolTests : IDisposable
     public async Task ReadTextFile_reports_a_file_that_is_not_there()
     {
         var exception = await Assert.ThrowsAsync<McpException>(
-            () => WorkspaceTools.ReadTextFile(_workspace, "absent.md"));
+            () => WorkspaceTools.ReadTextFile(_workspace, NullLoggerFactory.Instance, "absent.md"));
 
         Assert.Contains("absent.md", exception.Message, StringComparison.Ordinal);
     }
@@ -94,7 +95,7 @@ public sealed class WorkspaceToolTests : IDisposable
     [InlineData("   ")]
     public async Task ReadTextFile_requires_a_path(string path)
     {
-        await Assert.ThrowsAsync<McpException>(() => WorkspaceTools.ReadTextFile(_workspace, path));
+        await Assert.ThrowsAsync<McpException>(() => WorkspaceTools.ReadTextFile(_workspace, NullLoggerFactory.Instance, path));
     }
 
     /// <summary>
@@ -105,7 +106,7 @@ public sealed class WorkspaceToolTests : IDisposable
     public async Task ReadTextFile_turns_a_containment_failure_into_a_tool_error()
     {
         var exception = await Assert.ThrowsAsync<McpException>(
-            () => WorkspaceTools.ReadTextFile(_workspace, "../../secrets.txt"));
+            () => WorkspaceTools.ReadTextFile(_workspace, NullLoggerFactory.Instance, "../../secrets.txt"));
 
         Assert.Contains("workspace", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -115,8 +116,8 @@ public sealed class WorkspaceToolTests : IDisposable
     {
         Assert.False(Directory.Exists(Path.Combine(_root, "notes")));
 
-        await WorkspaceTools.AppendStudyNote(_workspace, "First note.", "One");
-        await WorkspaceTools.AppendStudyNote(_workspace, "Second note.", "Two");
+        await WorkspaceTools.AppendNoteAsync(_workspace, NullLoggerFactory.Instance, "First note.", "One", CancellationToken.None);
+        await WorkspaceTools.AppendNoteAsync(_workspace, NullLoggerFactory.Instance, "Second note.", "Two", CancellationToken.None);
 
         var notes = await File.ReadAllTextAsync(Path.Combine(_root, "notes", "study-notes.md"));
 
@@ -133,6 +134,6 @@ public sealed class WorkspaceToolTests : IDisposable
     [InlineData("   ")]
     public async Task AppendStudyNote_requires_a_note(string note)
     {
-        await Assert.ThrowsAsync<McpException>(() => WorkspaceTools.AppendStudyNote(_workspace, note));
+        await Assert.ThrowsAsync<McpException>(() => WorkspaceTools.AppendNoteAsync(_workspace, NullLoggerFactory.Instance, note, title: null, CancellationToken.None));
     }
 }

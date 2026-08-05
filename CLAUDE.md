@@ -53,7 +53,9 @@ false negative. See the `verify-mcp-server` skill before diagnosing any protocol
 ## Layout
 
 ```
-src/DotNetMcpServer.Server/       SDK-based MCP server; tools are [McpServerTool] methods
+src/DotNetMcpServer.Server/       SDK-based MCP server. Tools/ Resources/ Prompts/ Completions/
+                                  Logging/ — attributed methods where the set is fixed, request
+                                  handlers where it is discovered from the filesystem
 src/DotNetMcpServer.Agent/        console agent; SDK client + OpenAI tool-calling
 src/Mcp.Protocol.Handwritten/     frozen study artifact
 tests/DotNetMcpServer.Tests/      Tools (unit) · Protocol (artifact) · Integration (interop)
