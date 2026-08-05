@@ -58,7 +58,11 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             if (TryReadLine(ref buffer, out var line))
             {
                 var message = line.Length == 0 ? null : Deserialize(line);
-                _reader.AdvanceTo(buffer.Start, buffer.End);
+
+                // Consumed and examined both stop where this line ended. Marking the rest of
+                // the buffer examined would tell the reader we are waiting for new bytes, and
+                // a second message already sitting there would never be read.
+                _reader.AdvanceTo(buffer.Start);
 
                 // A blank line between messages is not a message; skip it rather than
                 // failing the session.
