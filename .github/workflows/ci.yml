@@ -10,6 +10,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    # The suite finishes in about a minute. Without this, a deadlocked test subprocess runs
+    # until GitHub's 6-hour ceiling instead of failing -- which is what it did on 2026-08-02
+    # and again on 2026-08-04.
+    timeout-minutes: 15
+
     steps:
     - uses: actions/checkout@v5
 
