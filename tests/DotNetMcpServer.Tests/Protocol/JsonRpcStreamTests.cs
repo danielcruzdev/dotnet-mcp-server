@@ -60,5 +60,39 @@ public class JsonRpcStreamTests
         Assert.Equal("initialize", first?.Method);
         Assert.Equal("notifications/initialized", second?.Method);
     }
+
+    [Fact]
+    public async Task A_trailing_message_with_no_closing_newline_is_still_read()
+    {
+        var pipe = new Pipe();
+
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes(
+            """{"jsonrpc":"2.0","id":7,"method":"tools/list"}"""));
+
+        // The peer closed without writing the final newline. The bytes are a whole message
+        // and the framing has to say so rather than discard them.
+        await pipe.Writer.CompleteAsync();
+
+        await using var connection = new JsonRpcConnection(pipe.Reader.AsStream(), Stream.Null);
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var message = await connection.ReadMessageAsync(timeout.Token);
+
+        Assert.Equal("tools/list", message?.Method);
+        Assert.Equal(7, message?.Id?.GetValue<int>());
+    }
+
+    [Fact]
+    public async Task A_peer_that_closes_with_nothing_buffered_ends_the_session()
+    {
+        var pipe = new Pipe();
+        await pipe.Writer.CompleteAsync();
+
+        await using var connection = new JsonRpcConnection(pipe.Reader.AsStream(), Stream.Null);
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        Assert.Null(await connection.ReadMessageAsync(timeout.Token));
+    }
 }
 

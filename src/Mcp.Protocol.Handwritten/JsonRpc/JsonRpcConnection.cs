@@ -74,13 +74,20 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                 return message;
             }
 
-            _reader.AdvanceTo(buffer.Start, buffer.End);
-
             if (read.IsCompleted)
             {
-                // A trailing message with no closing newline is still a message.
-                return buffer.Length > 0 ? Deserialize(buffer) : null;
+                // A trailing message with no closing newline is still a message. It is
+                // deserialized before AdvanceTo, not after: the buffer goes back to the
+                // reader the moment that call returns.
+                var trailing = buffer.Length > 0 ? Deserialize(buffer) : null;
+                _reader.AdvanceTo(buffer.End);
+
+                return trailing;
             }
+
+            // Nothing consumed, everything examined: there is no complete line yet, so the
+            // next read has to wait for more bytes.
+            _reader.AdvanceTo(buffer.Start, buffer.End);
         }
     }
 
