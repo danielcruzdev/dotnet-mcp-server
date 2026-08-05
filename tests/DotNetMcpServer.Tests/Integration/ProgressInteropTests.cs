@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Threading.Channels;
 using ModelContextProtocol;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -8,11 +10,30 @@ namespace DotNetMcpServer.Tests.Integration;
 /// Drives a long-running tool with a progress token and asserts the client sees the work
 /// advance, against the shipped server as a real subprocess.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Reports are collected through a notification handler bound to
+/// <c>notifications/progress</c>, not through the <see cref="IProgress{T}"/> overload of
+/// <see cref="McpClient.CallToolAsync"/>. The SDK ties that overload's registration to the
+/// lifetime of the request: when the response arrives the token is forgotten, and a report the
+/// client has read but not yet dispatched is dropped on the floor. Under a full-suite run that
+/// discarded every report rather than the last one — the failure read <c>reports=0</c>.
+/// </para>
+/// <para>
+/// A handler bound to the method outlives the request, so a report that is merely late still
+/// arrives. That turns "how long should we wait" from a guess into a bound.
+/// </para>
+/// </remarks>
 public sealed class ProgressInteropTests : IAsyncLifetime
 {
     private const int DocumentCount = 12;
 
+    private static readonly TimeSpan ReportTimeout = TimeSpan.FromSeconds(20);
+
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), "mcp-progress-" + Guid.NewGuid().ToString("N"));
+    private readonly Channel<ProgressNotificationParams> _reports =
+        Channel.CreateUnbounded<ProgressNotificationParams>();
+
     private McpClient? _client;
 
     public async Task InitializeAsync()
@@ -33,7 +54,29 @@ public sealed class ProgressInteropTests : IAsyncLifetime
             Arguments = ["--workspace-root", _workspace]
         });
 
-        _client = await McpClient.CreateAsync(transport);
+        var options = new McpClientOptions
+        {
+            Handlers = new McpClientHandlers
+            {
+                NotificationHandlers =
+                [
+                    new(NotificationMethods.ProgressNotification, (notification, cancellationToken) =>
+                    {
+                        var report = notification.Params?.Deserialize<ProgressNotificationParams>(
+                            McpJsonUtilities.DefaultOptions);
+
+                        if (report is not null)
+                        {
+                            _reports.Writer.TryWrite(report);
+                        }
+
+                        return default;
+                    })
+                ]
+            }
+        };
+
+        _client = await McpClient.CreateAsync(transport, options);
     }
 
     public async Task DisposeAsync()
@@ -54,21 +97,27 @@ public sealed class ProgressInteropTests : IAsyncLifetime
     [Fact]
     public async Task A_long_running_tool_reports_progress_as_it_goes()
     {
-        var progress = new CollectingProgress();
+        var token = new ProgressToken("scan-" + Guid.NewGuid().ToString("N"));
 
-        var result = await Client.CallToolAsync("scan_workspace", progress: progress);
+        var result = await Client.CallToolAsync(
+            "scan_workspace",
+            options: new RequestOptions { ProgressToken = token });
 
         Assert.NotEqual(true, result.IsError);
         Assert.Contains($"\"documents\":{DocumentCount}", TextOf(result), StringComparison.Ordinal);
 
-        // One report short is expected, not flaky. The final report is issued immediately
-        // before the tool returns and the response overtakes it: the SDK stops routing
-        // notifications for a request once that request has been answered.
-        await WaitForAsync(
-            () => progress.Reports.Count >= DocumentCount - 1,
-            () => $"reports={progress.Reports.Count}");
+        // Every document the tool walked owes exactly one report, including the last: the
+        // response no longer cancels their delivery. Each is awaited rather than counted after
+        // a sleep, so a slow machine makes the test slower and never makes it wrong.
+        var reports = new List<ProgressNotificationValue>();
 
-        var reports = progress.Reports;
+        for (var index = 0; index < DocumentCount; index++)
+        {
+            var report = await NextReportAsync();
+
+            Assert.Equal(token, report.ProgressToken);
+            reports.Add(report.Progress);
+        }
 
         Assert.All(reports, report => Assert.Equal(DocumentCount, report.Total));
         Assert.All(reports, report => Assert.StartsWith("note-", report.Message, StringComparison.Ordinal));
@@ -89,52 +138,17 @@ public sealed class ProgressInteropTests : IAsyncLifetime
 
         Assert.NotEqual(true, result.IsError);
         Assert.Contains($"\"documents\":{DocumentCount}", TextOf(result), StringComparison.Ordinal);
+
+        // Nothing asked for progress, so nothing may be sent. The tool has already returned,
+        // and the reports would have been written to the pipe ahead of the response it read.
+        Assert.False(_reports.Reader.TryRead(out _));
     }
 
-    /// <remarks>
-    /// Generous on purpose. The SDK dispatches notification handlers without waiting for them,
-    /// so the reports can still be running when the tool call returns — and the whole suite
-    /// runs several server subprocesses at once, which makes that gap wider than it looks on
-    /// an idle machine.
-    /// </remarks>
-    private static async Task WaitForAsync(Func<bool> condition, Func<string> describe)
+    private async Task<ProgressNotificationParams> NextReportAsync()
     {
-        for (var attempt = 0; attempt < 400 && !condition(); attempt++)
-        {
-            await Task.Delay(50);
-        }
+        using var timeout = new CancellationTokenSource(ReportTimeout);
 
-        Assert.True(condition(), $"The expected progress reports did not arrive: {describe()}");
-    }
-
-    /// <summary>
-    /// Collects reports without <see cref="Progress{T}"/>'s re-dispatch, which would add a
-    /// second source of reordering on top of the one being measured — and would append to a
-    /// list from several thread-pool threads at once.
-    /// </summary>
-    private sealed class CollectingProgress : IProgress<ProgressNotificationValue>
-    {
-        private readonly Lock _gate = new();
-        private readonly List<ProgressNotificationValue> _reports = [];
-
-        public IReadOnlyList<ProgressNotificationValue> Reports
-        {
-            get
-            {
-                lock (_gate)
-                {
-                    return [.. _reports];
-                }
-            }
-        }
-
-        public void Report(ProgressNotificationValue value)
-        {
-            lock (_gate)
-            {
-                _reports.Add(value);
-            }
-        }
+        return await _reports.Reader.ReadAsync(timeout.Token);
     }
 
     private static string TextOf(CallToolResult result)
