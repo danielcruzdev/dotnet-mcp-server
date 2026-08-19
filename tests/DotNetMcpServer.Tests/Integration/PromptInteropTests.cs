@@ -8,6 +8,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// Drives <c>prompts/list</c> and <c>prompts/get</c> against the shipped server as a real
 /// subprocess.
 /// </summary>
+[Trait("Phase", "3")]
 public sealed class PromptInteropTests : IAsyncLifetime
 {
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), "mcp-prompts-" + Guid.NewGuid().ToString("N"));

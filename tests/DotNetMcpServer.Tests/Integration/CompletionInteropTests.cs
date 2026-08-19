@@ -6,6 +6,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// <summary>
 /// Drives <c>completion/complete</c> against the shipped server as a real subprocess.
 /// </summary>
+[Trait("Phase", "3")]
 public sealed class CompletionInteropTests : IAsyncLifetime
 {
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), "mcp-complete-" + Guid.NewGuid().ToString("N"));

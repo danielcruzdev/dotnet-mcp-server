@@ -23,6 +23,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// callback would hide.
 /// </para>
 /// </remarks>
+[Trait("Phase", "3")]
 public sealed class ResourceSubscriptionInteropTests : IAsyncLifetime
 {
     /// <summary>The last revision on which <c>resources/subscribe</c> exists.</summary>

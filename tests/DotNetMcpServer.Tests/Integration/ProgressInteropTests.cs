@@ -24,6 +24,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// arrives. That turns "how long should we wait" from a guess into a bound.
 /// </para>
 /// </remarks>
+[Trait("Phase", "3")]
 public sealed class ProgressInteropTests : IAsyncLifetime
 {
     private const int DocumentCount = 12;

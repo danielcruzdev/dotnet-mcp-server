@@ -19,6 +19,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// unconditionally, so a server that ignored it would advertise something it never delivers.
 /// </remarks>
 #pragma warning disable MCP9005
+[Trait("Phase", "3")]
 public sealed class LoggingInteropTests : IAsyncLifetime
 {
     /// <summary>The last revision on which <c>logging/setLevel</c> exists.</summary>

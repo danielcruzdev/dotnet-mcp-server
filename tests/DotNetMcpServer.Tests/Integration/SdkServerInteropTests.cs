@@ -8,6 +8,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// These are the tests that prove the server interoperates with anything speaking MCP —
 /// Claude Desktop, VS Code, Claude Code — rather than only with the agent in this repository.
 /// </summary>
+[Trait("Phase", "1")]
 public sealed class SdkServerInteropTests : IAsyncLifetime
 {
     private static readonly string[] ExpectedToolNames =

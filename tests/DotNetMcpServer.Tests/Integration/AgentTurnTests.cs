@@ -16,6 +16,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// stubbed out. The MCP client cannot be faked — <c>McpClient</c> is abstract with non-virtual
 /// methods — and there is no reason to want to: the tool calls in these tests really execute.
 /// </summary>
+[Trait("Phase", "2")]
 public sealed class AgentTurnTests : IAsyncLifetime
 {
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), "agent-turn-" + Guid.NewGuid().ToString("N"));

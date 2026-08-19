@@ -14,6 +14,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// feature still works on every revision a client currently negotiates.
 /// </remarks>
 #pragma warning disable MCP9005
+[Trait("Phase", "3")]
 public sealed class SamplingInteropTests : IAsyncLifetime
 {
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), "mcp-sampling-" + Guid.NewGuid().ToString("N"));

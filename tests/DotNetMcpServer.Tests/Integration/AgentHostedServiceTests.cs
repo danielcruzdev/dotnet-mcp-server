@@ -13,6 +13,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// the real server subprocess. The model is never reached — the session ends on input, not on
 /// an answer — which is asserted by giving it a transport that throws if it is called.
 /// </summary>
+[Trait("Phase", "2")]
 public sealed class AgentHostedServiceTests : IDisposable
 {
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), "agent-host-" + Guid.NewGuid().ToString("N"));
