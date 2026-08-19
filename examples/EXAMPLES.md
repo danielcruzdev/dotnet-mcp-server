@@ -1,219 +1,198 @@
-﻿# Exemplos de Uso — DotNet MCP Server
+# Examples
 
-Este documento mostra como o servidor MCP funciona na prática: o protocolo, as ferramentas e como o agente as encadeia.
+What each phase delivered, and how to see it for yourself.
+
+This file used to document four tools and a protocol surface that stopped being accurate when
+Phase 3 landed, and it closed by pointing at a test file that did not exist. It rotted for a
+structural reason rather than a careless one: **Markdown does not compile**, so nothing failed
+when the code moved past it.
+
+So the demonstrations are not in this document. They are in `examples/probe/`, a console project
+inside `DotNetMcpServer.slnx` that drives the compiled server with the official SDK client and
+prints what came back. It is in the solution, so it breaks the build when the server's result
+types move; it is run, so it fails loudly when anything else does. This file is the index.
 
 ---
 
-## Estrutura dos exemplos
+## Layout
 
 ```
 examples/
-├── workspace/               ← arquivos que o servidor pode LER via read_text_file
-│   ├── dotnet-concepts.md   ← anotações sobre C# e .NET
-│   ├── csharp-snippets.md   ← snippets prontos para consulta
-│   ├── tasks.md             ← lista de tarefas do projeto
-│   └── budget-q1-2026.txt  ← dados de orçamento com expressões a calcular
-│
-└── jsonrpc/                 ← mensagens JSON-RPC brutas (request + response)
-    ├── 01-initialize-request.json
-    ├── 02-initialize-response.json
-    ├── 03-initialized-notification.json
-    ├── 04-list-tools-request.json
-    ├── 05-list-tools-response.json
-    ├── 06-call-get-datetime-request.json
-    ├── 07-call-get-datetime-response.json
-    ├── 08-call-calculate-request.json
-    ├── 09-call-calculate-response.json
-    ├── 10-call-read-file-request.json
-    ├── 11-call-read-file-response.json
-    ├── 12-call-append-note-request.json
-    ├── 13-call-append-note-response.json
-    ├── 14-error-path-traversal-request.json
-    └── 15-error-path-traversal-response.json
+├── EXAMPLES.md      this file — what each phase delivered, and how to exercise it
+├── probe/           the per-phase probe (a console project in the solution)
+│   ├── Program.cs       <phase> [capability] [--tests]
+│   ├── ServerBinary.cs  resolves the compiled binary; never `dotnet run`
+│   ├── Report.cs        printing and the PASS/FAIL tally
+│   └── Phases/          one file per phase
+├── workspace/       real documents the server reads — the probe points at these
+└── jsonrpc/         raw request/response frames, kept as an illustration of the
+                     hand-written artifact's newline framing (see the note at the end)
 ```
 
 ---
 
-## 1. Fluxo do protocolo MCP
+## Running it
 
-O protocolo usa JSON-RPC 2.0 sobre stdin/stdout. Todo fluxo começa com um handshake:
+Build first — the probe launches the **compiled** server binary, never `dotnet run`, because
+MSBuild writes to stdout and stdout is the channel the protocol owns.
 
-```
-Cliente                          Servidor
-  │                                  │
-  │──── initialize (id:1) ──────────▶│
-  │◀─── result: serverInfo + caps ───│
-  │                                  │
-  │──── notifications/initialized ──▶│  ← sem id = notificação (sem resposta)
-  │                                  │
-  │──── tools/list (id:2) ──────────▶│
-  │◀─── result: [ tool, tool, ... ] ─│
-  │                                  │
-  │──── tools/call (id:3) ──────────▶│
-  │◀─── result: { content, isError }─│
+```bash
+dotnet build DotNetMcpServer.slnx
+dotnet run --project examples/probe -- phase3
 ```
 
-**Diferença importante entre erro de protocolo e erro de ferramenta:**
+`dotnet run` is safe *here*: the probe's stdout is a console, and the server it spawns is
+always the compiled binary. Or call the binary directly:
 
-| Tipo | Onde aparece | Exemplo |
-|------|-------------|---------|
-| Erro de protocolo | `response.error` | tool não existe, JSON inválido |
-| Erro de ferramenta | `response.result.isError = true` | arquivo não encontrado, expressão inválida |
+```
+examples/probe/bin/Debug/net10.0/DotNetMcpServer.Probe[.exe] phase3
+```
+
+| Command | What it does |
+|---|---|
+| `probe` | lists what can be probed |
+| `probe phase3` | every Phase 3 check |
+| `probe phase3 resources` | one capability |
+| `probe phase3 --tests` | that phase's interop suite, via `[Trait("Phase", "3")]` |
+
+**The probe demonstrates. The interop suite proves.** `CLAUDE.md` and the `verify-mcp-server`
+skill are explicit that the suite driving the real binary is the only thing that establishes the
+server works, and a tool that prints `PASS` can quietly become the thing people run instead. The
+probe's verdict means something — it uses the same client against the same binary — but `--tests`
+is there so the proof is one flag away, and the verdict says so every run.
 
 ---
 
-## 2. Ferramentas disponíveis
+## Phase 1 — SDK migration
 
-### `get_current_datetime`
-Retorna a hora atual. Aceita um timezone IANA opcional.
+**What it delivered:** a server a client that is not this repository can talk to. Before it, the
+transport framed messages with an LSP-style `Content-Length` header instead of the newline
+delimiting MCP requires, so nothing but the agent in this repo could connect.
 
-**Request:**
-```json
-{
-  "jsonrpc": "2.0", "id": 1,
-  "method": "tools/call",
-  "params": {
-    "name": "get_current_datetime",
-    "arguments": { "timezone": "America/Sao_Paulo" }
-  }
-}
 ```
-**Response:**
-```json
-{ "result": { "content": [{ "type": "text", "text": "America/Sao_Paulo: Tuesday, 24 Mar 2026 09:34:56 -03:00" }], "isError": false } }
+probe phase1                 handshake · tools · call · containment
 ```
+
+```
+--- Phase 1 - call -----------------------------------------------------------
+  calculate_expression          (1200 + 350) / 5 = 310
+  PASS  an expression is evaluated and returned as data
+  get_current_datetime          2026-08-18T21:47:21-03:00  (Tuesday, 18 Aug 2026 21:47:21 -03:00)
+  PASS  an IANA timezone resolves — which is why InvariantGlobalization stays false
+```
+
+Five tools are advertised: `append_study_note`, `calculate_expression`, `get_current_datetime`,
+`read_text_file`, `scan_workspace`.
+
+**Not probed, deliberately:** the hand-written artifact in `src/Mcp.Protocol.Handwritten/`, which
+is Phase 1's other half. It is driven by `HandwrittenServerInteropTests` — the official SDK client
+against the hand-written server, which is what turns *"I implemented the protocol"* from an
+assertion into evidence. `probe phase1 --tests` runs it, along with the SDK server's own interop
+cases: **13 tests**.
 
 ---
 
-### `calculate_expression`
-Avalia expressões matemáticas com `+`, `-`, `*`, `/` e parênteses.
+## Phase 2 — Modern .NET architecture
 
-**Request:**
-```json
-{
-  "jsonrpc": "2.0", "id": 2,
-  "method": "tools/call",
-  "params": {
-    "name": "calculate_expression",
-    "arguments": { "expression": "(50 * 99) + (20 * 299) + (5 * 999)" }
-  }
-}
+**Phase 2 has no probe, on purpose.** It adopted the Generic Host, DI, validated `IOptions`, and
+a resilience pipeline — in the *agent*. None of that produces observable protocol behaviour, so a
+`probe phase2` would be a demonstration invented to fill a row in this table. Uniform coverage
+across phases is not a goal; a hollow example is worse than an absent one.
+
+What *is* observable is startup validation. Run the agent with `OPENAI_API_KEY` unset:
+
 ```
-**Response:**
-```json
-{ "result": { "content": [{ "type": "text", "text": "Resultado: 15925" }], "isError": false } }
+src/DotNetMcpServer.Agent/bin/Debug/net10.0/DotNetMcpServer.Agent
 ```
 
----
+```
+Hosting failed to start
+Microsoft.Extensions.Options.OptionsValidationException: DataAnnotation validation failed for
+'OpenAiSettings' members: 'ApiKey' with the error: 'The ApiKey field is required.'.
+```
 
-### `read_text_file`
-Lê qualquer arquivo de texto dentro do workspace. Caminhos fora do workspace são bloqueados.
+Exit code 82, before the first request rather than at it, with the missing member named.
 
-**Request:**
-```json
-{
-  "jsonrpc": "2.0", "id": 3,
-  "method": "tools/call",
-  "params": {
-    "name": "read_text_file",
-    "arguments": {
-      "path": "examples/workspace/dotnet-concepts.md",
-      "maxCharacters": 3000
-    }
-  }
-}
+```bash
+dotnet test DotNetMcpServer.slnx --filter "Phase=2"     # 5 tests
 ```
 
 ---
 
-### `append_study_note`
-Adiciona uma nota em `notes/study-notes.md` (criado automaticamente se não existir).
+## Phase 3 — The full MCP surface
 
-**Request:**
-```json
-{
-  "jsonrpc": "2.0", "id": 4,
-  "method": "tools/call",
-  "params": {
-    "name": "append_study_note",
-    "arguments": {
-      "title": "Records em C#",
-      "note": "Records têm igualdade por valor e são imutáveis por padrão. Perfeitos para DTOs."
-    }
-  }
-}
+**What it delivered:** every MCP capability, not just tools.
+
+```
+probe phase3                 all ten capabilities
+probe phase3 <capability>    one of them
+```
+
+| Capability | What the probe shows |
+|---|---|
+| `resources` | workspace documents listed with uri, mime type and size, then read back |
+| `templates` | `workspace://excerpt/{start}-{end}/{+path}` expanding into a line range |
+| `subscriptions` | an edit to a subscribed document arriving as a notification |
+| `prompts` | `study_plan(topic, [hoursPerWeek])`, `summarize_document(path, [audience])` |
+| `completion` | a `path` argument completing from documents the server can actually read |
+| `logging` | `logging/setLevel` opening the `notifications/message` stream |
+| `progress` | one report per document walked by `scan_workspace`, the last one included |
+| `structured` | `outputSchema` + `structuredContent`, and every tool's annotations |
+| `elicitation` | a tool asking the user for the argument it was not given |
+| `sampling` | the server borrowing the client's model to name a note |
+
+### The finding that outlived the phase
+
+Two of those capabilities are **already gone from the revision the SDK negotiates by default**.
+The probe shows each one twice — working on `2025-11-25`, the revision every shipping client
+still negotiates, and refused on `2026-07-28`:
+
+```
+--- Phase 3 - logging --------------------------------------------------------
+  on 2025-11-25                 logging/setLevel accepted
+  notifications/message         [Info] DotNetMcpServer.Server.Tools.WorkspaceTools
+      Read dotnet-concepts.md: 1621 characters returned, truncated=True
+  PASS  only this server's own log categories are forwarded, so the bridge terminates
+  SEP-2577 moved the level onto per-request _meta on 2026-07-28.
+  refusal                       Request failed (remote): The method 'logging/setLevel' is not
+                                available on protocol version '2026-07-28'. Use the per-request
+                                '_meta/io.modelcontextprotocol/logLevel' field instead.
+  PASS  the current revision refuses it and names its replacement
+```
+
+`resources/subscribe` (SEP-2575) behaves the same way and names `subscriptions/listen`. Neither
+refusal is a defect in this server — it is the specification moving, found by a test failing six
+days after the audit that argued spec velocity was the reason to build on the official SDK. See
+the decision log in [`.specs/PROGRESSO.md`](../.specs/PROGRESSO.md).
+
+```bash
+probe phase3 --tests     # 66 tests
 ```
 
 ---
 
-## 3. Cenário completo: sessão de estudos
+## What the probe does not do
 
-Exemplo de como o agente encadeia múltiplas ferramentas numa única conversa:
-
-**Usuário:** "Me resume os conceitos de async/await do arquivo de conceitos e salva uma nota resumida."
-
-```
-1. Agente chama: read_text_file("examples/workspace/dotnet-concepts.md")
-   → lê o conteúdo, identifica a seção async/await
-
-2. Agente processa o conteúdo com o LLM
-   → gera um resumo
-
-3. Agente chama: append_study_note(
-     title="async/await — resumo",
-     note="await libera a thread durante I/O. Nunca use .Result ou .Wait()."
-   )
-   → salva em notes/study-notes.md
-```
+- **It is not the proof.** `probe phase3 --tests` is. Of the **162** tests in the suite, 84 drive
+  a real client against a real server subprocess.
+- **It has no tests of its own.** It is a development tool; testing the tester is speculative
+  work. It is exercised by being run and it compiles in CI, which is what stops it from rotting.
+- **It does not assert exact counts** against `examples/workspace/`, which can gain files. It
+  reports what came back and derives its expectations from the answer — the progress check waits
+  for as many reports as `scan_workspace` said it walked. Checks that write a note or edit a
+  document build their own temp workspace, so running the probe leaves the repository clean.
+- **Renaming a tool does not break its build.** Tools are called by name over the wire, so that
+  is a runtime failure — `The probe failed: Request failed (remote): Unknown tool: 'scan_workspace'`,
+  exit code 1. What the project reference *does* buy is the compile-time half: rename a property
+  on `WorkspaceScan`, `CalculationResult` or `CurrentDateTime` and the probe stops building.
 
 ---
 
-## 4. Cenário: análise de orçamento
+## `examples/jsonrpc/`
 
-**Usuário:** "Quanto custa a infra por mês e qual a receita trimestral projetada?"
-
-```
-1. read_text_file("examples/workspace/budget-q1-2026.txt")
-   → retorna o arquivo com as expressões
-
-2. calculate_expression("850 + 420 + 130 + 75 + 60")
-   → Resultado: 1535
-
-3. calculate_expression("((50 * 99) + (20 * 299) + (5 * 999)) * 3")
-   → Resultado: 47775
-
-4. append_study_note(
-     title="Orçamento Q1 2026",
-     note="Infra mensal: R$ 1.535. Receita trimestral projetada: R$ 47.775."
-   )
-```
-
----
-
-## 5. Como usar os arquivos do workspace com o servidor
-
-Ao rodar o servidor, o `workspaceRoot` é configurado em `appsettings.json`:
-
-```json
-{
-  "mcp": {
-    "workspaceRoot": "."
-  }
-}
-```
-
-Com `workspaceRoot = "."` apontando para a raiz do repositório, você acessa os arquivos de exemplo assim:
-
-```
-read_text_file("examples/workspace/dotnet-concepts.md")
-read_text_file("examples/workspace/tasks.md")
-read_text_file("examples/workspace/budget-q1-2026.txt")
-read_text_file("README.md")
-```
-
----
-
-## 6. Testes de cenário
-
-Veja `tests/DotNetMcpServer.Tests/Examples/ScenarioTests.cs` para testes que demonstram esses fluxos completos com asserções verificáveis.
-
+Fifteen raw request/response frames, kept as they are. They predate Phase 3 and cover only the
+original four tools, so they are **incomplete rather than wrong** — and what they illustrate,
+newline-delimited framing with one JSON object per line, is still exactly how the transport
+works. They are best read as an illustration of the hand-written artifact rather than as a
+current capability list; the probe is the current capability list. Regenerating them is not
+planned.

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Not needed to speak the protocol — the probe calls tools by name over the wire, so
+      renaming one is a runtime failure, not a compile error. What this reference buys is
+      compile-time coupling to the server's public result types: rename a property on
+      WorkspaceScan, CalculationResult or CurrentDateTime and this project stops building.
+    -->
+    <ProjectReference Include="..\..\src\DotNetMcpServer.Server\DotNetMcpServer.Server.csproj" />
+  </ItemGroup>
+
+</Project>

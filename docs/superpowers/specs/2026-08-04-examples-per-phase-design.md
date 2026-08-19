@@ -1,7 +1,11 @@
 # Per-phase examples — design
 
 **Date:** 2026-08-04
-**Status:** approved, not yet implemented
+**Status:** implemented 2026-08-18. One deviation: checks that write a note or edit a document
+build their own temp workspace rather than pointing at `examples/workspace/`, which would
+otherwise leave untracked files in the repository on every run. Read-only checks still use it,
+which is what the "real documents" reasoning below was about. See the decision log in
+`.specs/PROGRESSO.md`.
 
 ## The problem
 
