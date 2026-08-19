@@ -9,6 +9,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// subprocess. Resources are only worth having if a client that is not this repository can
 /// list and read them, which is what these assert.
 /// </summary>
+[Trait("Phase", "3")]
 public sealed class ResourceInteropTests : IAsyncLifetime
 {
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), "mcp-resources-" + Guid.NewGuid().ToString("N"));

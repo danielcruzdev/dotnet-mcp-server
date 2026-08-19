@@ -9,6 +9,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// tool is called without a title, the server asks the client for one, and the answer lands in
 /// the note on disk.
 /// </summary>
+[Trait("Phase", "3")]
 public sealed class ElicitationInteropTests : IAsyncLifetime
 {
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), "mcp-elicit-" + Guid.NewGuid().ToString("N"));

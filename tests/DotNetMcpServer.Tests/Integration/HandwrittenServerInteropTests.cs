@@ -20,6 +20,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// than silently shipping a server no client can talk to.
 /// </para>
 /// </remarks>
+[Trait("Phase", "1")]
 public sealed class HandwrittenServerInteropTests : IAsyncLifetime
 {
     private McpClient? _client;

@@ -9,6 +9,7 @@ namespace DotNetMcpServer.Tests.Integration;
 /// behavioural hints — and that <c>tools/call</c> keeps the promise, against the shipped
 /// server as a real subprocess.
 /// </summary>
+[Trait("Phase", "3")]
 public sealed class StructuredOutputInteropTests : IAsyncLifetime
 {
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), "mcp-structured-" + Guid.NewGuid().ToString("N"));
