@@ -10,7 +10,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The AspNetCore package carries a FrameworkReference to Microsoft.AspNetCore.App, so the
+      HTTP transport is available without moving this project onto Microsoft.NET.Sdk.Web.
+      stdio remains the default and is unaffected by its presence.
+    -->
     <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
   </ItemGroup>
 
