@@ -1,4 +1,6 @@
+using System.Text;
 using DotNetMcpServer.Server.Logging;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -7,7 +9,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.AspNetCore;
+using ModelContextProtocol.AspNetCore.Authentication;
+using ModelContextProtocol.Authentication;
 using ModelContextProtocol.Server;
 
 namespace DotNetMcpServer.Server.Hosting;
@@ -158,13 +163,37 @@ internal static partial class HttpServerHost
         mcpServer.WithSetLoggingLevelHandler(ClientLogBridge.AttachOnSetLevelAsync);
 #pragma warning restore MCP9005
 
+        // OAuth 2.1 resource server. Off unless an authority is named; see
+        // McpAuthenticationSettings for why that is the default rather than a lapse.
+        var authentication = McpAuthenticationSettings.Resolve(args, builder.Configuration["urls"]!);
+
+        // Honours [Authorize] on tools, prompts and resources. Registered unconditionally,
+        // because the SDK fails closed: finding authorization metadata on a tool with no
+        // filter to evaluate it is an error rather than a licence to serve the tool anyway.
+        // That is the right call, and it is why the policies below have to exist even when
+        // this server is not protecting anything.
+        mcpServer.AddAuthorizationFilters();
+        AddToolScopePolicies(builder, enforced: authentication is not null);
+
+        if (authentication is not null)
+        {
+            AddResourceServer(builder, authentication);
+        }
+
         var app = builder.Build();
 
         // Origin validation runs ahead of the MCP endpoint so a rebinding attempt is refused
         // before it reaches any protocol handling. See OriginPolicy for what it defends.
         var origins = OriginPolicy.Resolve(args);
 
-        app.MapMcp(EndpointPattern).AddEndpointFilter(async (context, next) =>
+        var mcpEndpoint = app.MapMcp(EndpointPattern);
+
+        if (authentication is not null)
+        {
+            mcpEndpoint.RequireAuthorization();
+        }
+
+        mcpEndpoint.AddEndpointFilter(async (context, next) =>
         {
             var origin = context.HttpContext.Request.Headers.Origin.FirstOrDefault();
 
@@ -214,6 +243,92 @@ internal static partial class HttpServerHost
 
         return bool.TryParse(Environment.GetEnvironmentVariable(environmentVariable), out var fromEnvironment)
             && fromEnvironment;
+    }
+
+    /// <summary>
+    /// Registers bearer-token validation and the RFC 9728 metadata document that tells an
+    /// unauthenticated client where to go and get a token.
+    /// </summary>
+    private static void AddResourceServer(WebApplicationBuilder builder, McpAuthenticationSettings settings)
+    {
+        builder.Services
+            .AddAuthentication(options =>
+            {
+                // The two schemes do different jobs. JWT bearer decides whether a presented
+                // token is good; the MCP scheme owns the refusal, because a 401 has to carry a
+                // WWW-Authenticate pointing at the metadata document or the client has no way
+                // to discover which authorization server to use.
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = McpAuthenticationDefaults.AuthenticationScheme;
+            })
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidIssuer = settings.Authority.ToString().TrimEnd('/'),
+                    ValidateLifetime = true,
+
+                    // The audience check is what stops a token minted for some other MCP server
+                    // from opening this one. RFC 8707 calls it resource indicators; here it is
+                    // simply the claim this server refuses to ignore.
+                    ValidateAudience = true,
+                    ValidAudience = settings.Resource.ToString(),
+
+                    ValidateIssuerSigningKey = true
+                };
+
+                if (settings.SigningKey is null)
+                {
+                    // Production: trust only what the authority publishes.
+                    options.Authority = settings.Authority.ToString();
+                }
+                else
+                {
+                    // Development and tests: a shared secret, so a token can be minted without
+                    // an identity provider to stand up first.
+                    options.TokenValidationParameters.IssuerSigningKey =
+                        new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.SigningKey));
+                    options.RequireHttpsMetadata = false;
+                }
+            })
+            .AddMcp(options => options.ResourceMetadata = new ProtectedResourceMetadata
+            {
+                Resource = settings.Resource.ToString(),
+                AuthorizationServers = { settings.Authority.ToString() },
+                ScopesSupported = [.. settings.Scopes]
+
+                // BearerMethodsSupported is left alone: it already contains "header", and a
+                // collection initializer appends rather than replaces, so naming it again
+                // published it twice.
+            });
+
+    }
+
+    /// <summary>
+    /// Registers one authorization policy per scope, so a tool can name the permission it
+    /// needs rather than merely requiring that somebody is signed in.
+    /// </summary>
+    /// <param name="enforced">
+    /// Whether the policies actually check anything. False on a server with no authorization
+    /// server configured, where they pass for everyone.
+    /// </param>
+    /// <remarks>
+    /// The trivially-satisfied variant is not a hole that has been left open; it is the same
+    /// gate stated once. A server that was never told about an authorization server has no
+    /// tokens to inspect and no issuer to check them against, so the only choices are to serve
+    /// its tools to the caller in front of it — which is what an unprotected server means — or
+    /// to serve nothing at all. Naming an authority is what turns the scopes on, and it is the
+    /// one decision an operator has to make.
+    /// </remarks>
+    private static void AddToolScopePolicies(WebApplicationBuilder builder, bool enforced)
+    {
+        builder.Services
+            .AddAuthorizationBuilder()
+            .AddPolicy(McpScopes.Tools, policy => policy.RequireAssertion(
+                context => !enforced || McpScopes.HasScope(context.User, McpScopes.Tools)))
+            .AddPolicy(McpScopes.Write, policy => policy.RequireAssertion(
+                context => !enforced || McpScopes.HasScope(context.User, McpScopes.Write)));
     }
 
     private static IEnumerable<string> BoundAddresses(WebApplication app)

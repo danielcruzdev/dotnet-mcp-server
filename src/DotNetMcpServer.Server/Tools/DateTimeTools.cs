@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
+using DotNetMcpServer.Server.Hosting;
+using Microsoft.AspNetCore.Authorization;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
@@ -11,6 +13,7 @@ namespace DotNetMcpServer.Server.Tools;
 [McpServerToolType]
 public static class DateTimeTools
 {
+    [Authorize(Policy = McpScopes.Tools)]
     [McpServerTool(
         Name = "get_current_datetime",
         ReadOnly = true,

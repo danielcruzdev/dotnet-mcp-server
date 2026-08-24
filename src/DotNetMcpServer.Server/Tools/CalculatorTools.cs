@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using DotNetMcpServer.Server.Hosting;
+using Microsoft.AspNetCore.Authorization;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
@@ -10,6 +12,7 @@ namespace DotNetMcpServer.Server.Tools;
 [McpServerToolType]
 public static partial class CalculatorTools
 {
+    [Authorize(Policy = McpScopes.Tools)]
     [McpServerTool(
         Name = "calculate_expression",
         ReadOnly = true,

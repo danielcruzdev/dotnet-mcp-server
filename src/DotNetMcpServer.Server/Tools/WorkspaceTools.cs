@@ -1,8 +1,10 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;
+using DotNetMcpServer.Server.Hosting;
 using DotNetMcpServer.Server.Resources;
 using DotNetMcpServer.Server.Workspace;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
@@ -34,6 +36,7 @@ public static partial class WorkspaceTools
     // The annotations are hints a client uses to decide what to auto-approve. Their defaults
     // are the cautious ones — not read-only, destructive, non-idempotent, open-world — so
     // saying nothing makes every tool look as dangerous as the worst of them.
+    [Authorize(Policy = McpScopes.Tools)]
     [McpServerTool(Name = "read_text_file", ReadOnly = true, Idempotent = true, OpenWorld = false)]
     [Description("Reads a text file from inside the project workspace.")]
     public static async Task<string> ReadTextFile(
@@ -84,7 +87,9 @@ public static partial class WorkspaceTools
     }
 
     // Writes, but only ever adds: nothing already in the file is lost. Not idempotent — the
-    // same call twice leaves two notes, which is the point of an append tool.
+    // same call twice leaves two notes, which is the point of an append tool. It is also the
+    // only tool that changes the user's disk, which is what puts it behind the write scope.
+    [Authorize(Policy = McpScopes.Write)]
     [McpServerTool(Name = "append_study_note", Destructive = false, Idempotent = false, OpenWorld = false)]
     [Description("Creates or appends a note in notes/study-notes.md inside the workspace.")]
     public static async Task<string> AppendStudyNote(
@@ -133,6 +138,7 @@ public static partial class WorkspaceTools
         return $"Note saved to: {notesFile}";
     }
 
+    [Authorize(Policy = McpScopes.Tools)]
     [McpServerTool(
         Name = "scan_workspace",
         ReadOnly = true,

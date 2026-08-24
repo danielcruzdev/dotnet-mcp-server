@@ -22,6 +22,16 @@
     independently — it requires Microsoft.Extensions.Http >= 10.0.10, which is what moved the
     group off 10.0.0.
   -->
+  <!--
+    Bearer token validation for the Streamable HTTP transport. Kept on the same 10.0.10
+    servicing train as the other runtime extensions; it brings Microsoft.IdentityModel 8.19.2
+    transitively, which is the version the test project mints its tokens with.
+  -->
+  <ItemGroup Label="Authentication">
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.19.2" />
+  </ItemGroup>
+
   <ItemGroup Label="Hosting and configuration">
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10" />
