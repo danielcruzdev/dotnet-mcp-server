@@ -108,6 +108,20 @@ internal static partial class HttpServerHost
 
         if (sessionsEnabled)
         {
+            // Resumability. The SDK generates an id for every SSE event, retains them, and
+            // replays whatever a reconnecting client missed when it presents Last-Event-ID.
+            // The backing store is an IDistributedCache, so the in-memory one here is the
+            // single-process choice and swapping in Redis is a registration change rather
+            // than a code change.
+            //
+            // Inside this branch because resumability is part of the same escape hatch: the
+            // store carries MCP9006 for SEP-2567 exactly as the session knobs above do. There
+            // is no Last-Event-ID to honour without a session to replay it onto.
+            builder.Services.AddDistributedMemoryCache();
+#pragma warning disable MCP9006
+            mcpServer.WithDistributedCacheEventStreamStore();
+#pragma warning restore MCP9006
+
             // Releases the session's client logger when its session ends; without this the
             // bridge would hold one provider for every client the process has ever served.
             //

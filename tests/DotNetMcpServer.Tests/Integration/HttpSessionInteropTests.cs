@@ -27,19 +27,10 @@ namespace DotNetMcpServer.Tests.Integration;
 [Trait("Phase", "4")]
 public sealed class HttpSessionInteropTests : IAsyncLifetime
 {
-    private const string SessionIdHeader = "Mcp-Session-Id";
-
     /// <summary>A revision on which sessions still exist, for the raw-HTTP cases.</summary>
     private const string SessionEraProtocol = "2025-06-18";
 
     private static readonly TimeSpan NotificationTimeout = TimeSpan.FromSeconds(20);
-
-    /// <summary>
-    /// Written as a constant rather than interpolated: the nested braces of a JSON-RPC
-    /// envelope fight every form of raw string literal the compiler offers.
-    /// </summary>
-    private const string InitializePayload =
-        """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"interop-test","version":"1.0"}}}""";
 
     private readonly string _workspace = Path.Combine(Path.GetTempPath(), "mcp-sess-" + Guid.NewGuid().ToString("N"));
     private readonly List<IAsyncDisposable> _disposables = [];
@@ -69,10 +60,10 @@ public sealed class HttpSessionInteropTests : IAsyncLifetime
         var server = await StartAsync();
         using var http = new HttpClient();
 
-        using var response = await InitializeAsync(http, server.Endpoint);
+        using var response = await RawMcpHttp.InitializeRawAsync(http, server.Endpoint, SessionEraProtocol);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.False(response.Headers.Contains(SessionIdHeader));
+        Assert.False(response.Headers.Contains(RawMcpHttp.SessionIdHeader));
     }
 
     [Fact]
@@ -81,10 +72,10 @@ public sealed class HttpSessionInteropTests : IAsyncLifetime
         var server = await StartAsync(withSessions: true);
         using var http = new HttpClient();
 
-        using var response = await InitializeAsync(http, server.Endpoint);
+        using var response = await RawMcpHttp.InitializeRawAsync(http, server.Endpoint, SessionEraProtocol);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.False(string.IsNullOrWhiteSpace(SessionIdOf(response)));
+        Assert.False(string.IsNullOrWhiteSpace(RawMcpHttp.SessionIdOf(response)));
     }
 
     [Fact]
@@ -94,16 +85,17 @@ public sealed class HttpSessionInteropTests : IAsyncLifetime
         using var http = new HttpClient();
 
         string sessionId;
-        using (var initialize = await InitializeAsync(http, server.Endpoint))
+        using (var initialize = await RawMcpHttp.InitializeRawAsync(http, server.Endpoint, SessionEraProtocol))
         {
-            sessionId = SessionIdOf(initialize)!;
+            sessionId = RawMcpHttp.SessionIdOf(initialize)!;
         }
 
-        using var listed = await PostAsync(
+        using var listed = await RawMcpHttp.PostAsync(
             http,
             server.Endpoint,
             """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""",
-            sessionId);
+            sessionId,
+            SessionEraProtocol);
 
         Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
         Assert.Contains("calculate_expression", await listed.Content.ReadAsStringAsync(), StringComparison.Ordinal);
@@ -116,25 +108,26 @@ public sealed class HttpSessionInteropTests : IAsyncLifetime
         using var http = new HttpClient();
 
         string sessionId;
-        using (var initialize = await InitializeAsync(http, server.Endpoint))
+        using (var initialize = await RawMcpHttp.InitializeRawAsync(http, server.Endpoint, SessionEraProtocol))
         {
-            sessionId = SessionIdOf(initialize)!;
+            sessionId = RawMcpHttp.SessionIdOf(initialize)!;
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Delete, server.Endpoint);
-        request.Headers.Add(SessionIdHeader, sessionId);
-        request.Headers.Add("MCP-Protocol-Version", SessionEraProtocol);
+        request.Headers.Add(RawMcpHttp.SessionIdHeader, sessionId);
+        request.Headers.Add(RawMcpHttp.ProtocolVersionHeader, SessionEraProtocol);
         using var deleted = await http.SendAsync(request);
 
         Assert.True(
             deleted.StatusCode is HttpStatusCode.OK or HttpStatusCode.NoContent,
             $"DELETE returned {(int)deleted.StatusCode}.");
 
-        using var afterDelete = await PostAsync(
+        using var afterDelete = await RawMcpHttp.PostAsync(
             http,
             server.Endpoint,
             """{"jsonrpc":"2.0","id":3,"method":"tools/list"}""",
-            sessionId);
+            sessionId,
+            SessionEraProtocol);
 
         Assert.Equal(HttpStatusCode.NotFound, afterDelete.StatusCode);
     }
@@ -147,15 +140,16 @@ public sealed class HttpSessionInteropTests : IAsyncLifetime
 
         // The session must exist before an unknown id means anything: a server with no
         // sessions at all could plausibly answer 404 for a different reason.
-        using (await InitializeAsync(http, server.Endpoint))
+        using (await RawMcpHttp.InitializeRawAsync(http, server.Endpoint, SessionEraProtocol))
         {
         }
 
-        using var response = await PostAsync(
+        using var response = await RawMcpHttp.PostAsync(
             http,
             server.Endpoint,
             """{"jsonrpc":"2.0","id":4,"method":"tools/list"}""",
-            sessionId: "a-session-that-was-never-issued");
+            sessionId: "a-session-that-was-never-issued",
+            SessionEraProtocol);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -239,58 +233,6 @@ public sealed class HttpSessionInteropTests : IAsyncLifetime
         _disposables.Add(client);
 
         return client;
-    }
-
-    private static async Task<HttpResponseMessage> InitializeAsync(HttpClient http, Uri endpoint)
-    {
-        var response = await PostAsync(
-            http,
-            endpoint,
-            InitializePayload,
-            sessionId: null);
-
-        var sessionId = SessionIdOf(response);
-
-        if (sessionId is not null)
-        {
-            using var initialized = await PostAsync(
-                http,
-                endpoint,
-                """{"jsonrpc":"2.0","method":"notifications/initialized"}""",
-                sessionId);
-        }
-
-        return response;
-    }
-
-    private static async Task<HttpResponseMessage> PostAsync(
-        HttpClient http,
-        Uri endpoint,
-        string payload,
-        string? sessionId)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
-        {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json")
-        };
-
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
-        request.Headers.Add("MCP-Protocol-Version", SessionEraProtocol);
-
-        if (sessionId is not null)
-        {
-            request.Headers.Add(SessionIdHeader, sessionId);
-        }
-
-        return await http.SendAsync(request);
-    }
-
-    private static string? SessionIdOf(HttpResponseMessage response)
-    {
-        return response.Headers.TryGetValues(SessionIdHeader, out var values)
-            ? values.FirstOrDefault()
-            : null;
     }
 
     private static async Task<bool> ReadWithinTimeoutAsync(ChannelReader<bool> reader)
