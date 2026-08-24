@@ -36,7 +36,7 @@ internal static partial class HttpServerHost
     /// starts is how a local tool server becomes a public one by accident — the spec calls out
     /// localhost binding for exactly this reason.
     /// </summary>
-    private const string DefaultUrls = "http://127.0.0.1:3001";
+    internal const string DefaultUrls = "http://127.0.0.1:3001";
 
     /// <summary>
     /// Written to stderr once Kestrel has bound, so a caller that asked for port 0 can learn
@@ -160,7 +160,26 @@ internal static partial class HttpServerHost
 
         var app = builder.Build();
 
-        app.MapMcp(EndpointPattern);
+        // Origin validation runs ahead of the MCP endpoint so a rebinding attempt is refused
+        // before it reaches any protocol handling. See OriginPolicy for what it defends.
+        var origins = OriginPolicy.Resolve(args);
+
+        app.MapMcp(EndpointPattern).AddEndpointFilter(async (context, next) =>
+        {
+            var origin = context.HttpContext.Request.Headers.Origin.FirstOrDefault();
+
+            if (!origins.IsAllowed(origin))
+            {
+                LogOriginRejected(
+                    context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger(typeof(HttpServerHost).FullName!),
+                    origin ?? string.Empty);
+
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+
+            return await next(context);
+        });
 
         await app.StartAsync();
 
@@ -209,4 +228,9 @@ internal static partial class HttpServerHost
 
     [LoggerMessage(Level = LogLevel.Information, Message = ListeningMessagePrefix + "{Address}")]
     private static partial void LogListening(ILogger logger, string address);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Refused a request from disallowed origin {Origin}")]
+    private static partial void LogOriginRejected(ILogger logger, string origin);
 }
