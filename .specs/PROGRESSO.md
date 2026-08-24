@@ -1,30 +1,42 @@
 # Execution Tracker — DotNetMcpServer
 
 > Companion to [`PRD.md`](PRD.md) v2.0. Task IDs match one-to-one and are named in commit bodies.
-> **Last updated:** 2026-08-18
+> **Last updated:** 2026-08-23
 
 ---
 
 ## Current status
 
-**Phase 3 — Full MCP Surface via SDK** ✅ complete · **Phase 4 — Streamable HTTP + OAuth 2.1** ⬜ next
+**Phase 4 — Streamable HTTP + OAuth 2.1** 🟦 7 / 8 · **Phase 5 — Tool Library & Security** ⬜ next
 
 ```
-Overall   ████████░░░░░░░░░░░░  33 / 80 tasks   (41%)
+Overall   ██████████░░░░░░░░░░  40 / 80 tasks   (50%)
 
 Phase 1   ████████████████████  14 / 14   ✅ complete
 Phase 2   ████████████████████   9 / 9   ✅ complete
 Phase 3   ████████████████████  10 / 10   ✅ complete
-Phase 4   ░░░░░░░░░░░░░░░░░░░░   0 / 8
+Phase 4   █████████████████░░░   7 / 8    🟦 F4-07 awaits a Docker daemon
 Phase 5   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 Phase 6   ░░░░░░░░░░░░░░░░░░░░   0 / 10
 Phase 7   ░░░░░░░░░░░░░░░░░░░░   0 / 7
 Phase 8   ░░░░░░░░░░░░░░░░░░░░   0 / 11
 ```
 
-**Next action:** Phase 4 — `F4-01`, `ModelContextProtocol.AspNetCore` and Streamable HTTP.
-Phase 5 is also unblocked (it only needs Phase 2) and is the one the SDK contributes nothing
-to, so it carries more signal per hour than Phase 4 does.
+**Next action:** verify `F4-07` — `docker compose up --build` against the Keycloak realm, which
+is the one acceptance criterion in this phase that has never been executed. Then Phase 5, which
+the SDK contributes nothing to and which still carries more signal per hour than anything left.
+
+**Phase 4 outcome:** the server serves MCP over Streamable HTTP as well as stdio, from one
+binary and one shared registration, and one theory holds both transports to the same
+assertions. It is an OAuth 2.1 protected resource when an authority is named, refuses a
+disallowed `Origin`, and replays missed SSE events from `Last-Event-ID`. The finding that
+mattered most was again not in the task list: **`2026-07-28` (SEP-2567) removed `Mcp-Session-Id`
+from Streamable HTTP altogether.** Sessions — and therefore resumability, elicitation, sampling
+and every unsolicited notification — are now a back-compat escape hatch the SDK marks obsolete.
+`F4-02` and `F4-03` were written against a transport the specification had already changed. The
+server ships stateless by default and takes `--http-sessions` to opt back in, with a pair of
+tests making the cost of that default executable rather than a claim in a comment. Third phase
+running, third time spec velocity has been the headline — see the decision log.
 
 **Exercising a closed phase:** `examples/probe/` drives the compiled server with the official SDK
 client and prints what came back — `probe phase1`, `probe phase3`, `probe phase3 <capability>`,
@@ -219,21 +231,46 @@ The **Fixes** column links each task back to an audit finding in [`PRD.md` §3](
 
 | | ID | Task | Fixes |
 |:---:|---|---|---|
-| ⬜ | **F4-01** | Add `ModelContextProtocol.AspNetCore`; expose MCP over Streamable HTTP | — |
-| ⬜ | **F4-02** | Session management and SSE streaming verified end to end | — |
-| ⬜ | **F4-03** | Resumability: event IDs + `Last-Event-ID` replay | — |
-| ⬜ | **F4-04** | Validate the `Origin` header and bind to localhost by default | S6 |
-| ⬜ | **F4-05** | OAuth 2.1 resource server: RFC 9728 metadata, `WWW-Authenticate`, JWT validation | — |
-| ⬜ | **F4-06** | Per-tool authorization scopes enforced before dispatch | S6 |
-| ⬜ | **F4-07** | Multi-stage `Dockerfile` + `docker-compose.yml` with a local identity provider | D5 |
-| ⬜ | **F4-08** | Run the full suite against **both** transports from one parameterized test | — |
+| ✅ | **F4-01** | Add `ModelContextProtocol.AspNetCore`; expose MCP over Streamable HTTP | — |
+| ✅ | **F4-02** | Session management and SSE streaming verified end to end | — |
+| ✅ | **F4-03** | Resumability: event IDs + `Last-Event-ID` replay | — |
+| ✅ | **F4-04** | Validate the `Origin` header and bind to localhost by default | S6 |
+| ✅ | **F4-05** | OAuth 2.1 resource server: RFC 9728 metadata, `WWW-Authenticate`, JWT validation | — |
+| ✅ | **F4-06** | Per-tool authorization scopes enforced before dispatch | S6 |
+| 🟦 | **F4-07** | Multi-stage `Dockerfile` + `docker-compose.yml` with a local identity provider | D5 |
+| ✅ | **F4-08** | Run the full suite against **both** transports from one parameterized test | — |
 
 **Done when**
-- [ ] The suite runs green against both transports from a single test theory
-- [ ] A missing or invalid token returns 401 with a correct `WWW-Authenticate` header
-- [ ] A forged `Origin` is rejected
-- [ ] A dropped SSE connection resumes from `Last-Event-ID` with no message loss
-- [ ] `docker compose up` yields a working server
+- [x] **The suite runs green against both transports from a single test theory** — 11 cases ×
+      2 transports in `BothTransportsInteropTests`: handshake, capabilities, tool list, three
+      tool calls, structured content, the workspace boundary, resources, prompts, completion
+- [x] **A missing or invalid token returns 401 with a correct `WWW-Authenticate` header** — the
+      challenge names the RFC 9728 document, and a test follows it to the metadata rather than
+      constructing the URL. Four bad tokens are refused: wrong audience, wrong issuer, expired,
+      forged signature
+- [x] **A forged `Origin` is rejected** — 403 before the request reaches any protocol handling;
+      loopback and configured origins pass, a literal `null` origin does not
+- [x] **A dropped SSE connection resumes from `Last-Event-ID` with no message loss** — proven
+      on `2025-11-25`, the one revision with both sessions and priming events
+- [ ] **`docker compose up` yields a working server** — `Dockerfile`, `docker-compose.yml` and
+      the Keycloak realm are written and the health probe is verified on the host, but no
+      Docker daemon has run them. Owner: Daniel. This is the whole of `F4-07`, and the only
+      acceptance criterion in this phase that has never been executed
+
+**What the ✅s do and do not mean:**
+- `F4-02` and `F4-03` are ✅ against a transport mode the current revision has removed.
+  `Mcp-Session-Id` is gone on `2026-07-28` (SEP-2567), so sessions, resumability, elicitation,
+  sampling and unsolicited notifications are all reachable only behind `--http-sessions`, and
+  the SDK marks the machinery obsolete. Everything works on the revisions shipping clients
+  negotiate, and tests pin each boundary — but reading these two ticks as "the server does
+  sessions" without reading this paragraph would overstate them.
+- The default HTTP server advertises the logging capability and can never deliver a
+  `notifications/message`, because stateless mode has no channel for an unsolicited message.
+  That is the transport's property rather than this server's gap, and it is the same shape as
+  the `F3-03` and `F3-06` findings one phase earlier.
+- `F4-05` is verified against a shared signing key rather than a real issuer's JWKS. Issuer,
+  audience, expiry and signature are checked identically either way, but the JWKS fetch itself
+  is exactly what `F4-07` would exercise and has not been run.
 
 ---
 
@@ -355,14 +392,32 @@ Update after each phase. Baseline measured 2026-07-28 at commit `1b5a8f1`.
 | Artifact interoperates with the SDK client | ❌ No | ✅ **Yes** — 7 tests in CI | ✅ Verified in CI |
 | MCP capabilities served | tools only | **tools + resources + prompts + completion + logging + progress + elicitation + sampling** | tools + resources + prompts + logging + completion |
 | MCP tools exposed | 4 | 5 | 12+ |
-| Test cases | 69 | 162 | 200+ |
-| Integration tests (real client ↔ real server) | 0 | **84** | grows with each phase |
-| Line coverage | not measured | **70.1%** (branch 57.2%) | ≥ 80% |
+| Test cases | 69 | **223** | 200+ ✅ |
+| Integration tests (real client ↔ real server) | 0 | **145** (Phase 1 · 13, 2 · 5, 3 · 66, 4 · 61) | grows with each phase |
+| Line coverage | not measured | **36.9%** (branch 27.3%) — *down from 70.1%; see below* | ≥ 80% |
 | Projects under test | 2 / 3 | **4 / 4** | all |
 | Build warnings | not enforced | **0, enforced** | 0, enforced |
 | CI platforms | 1 | 1 | 3 |
 | ADRs published | 0 | **1** | 4+ |
-| Transports | 1 (non-compliant) | 1 (spec-compliant, both servers) | 2 (stdio + HTTP) |
+| Transports | 1 (non-compliant) | **2 — stdio + Streamable HTTP** | 2 (stdio + HTTP) ✅ |
+| Authorization | none | **OAuth 2.1 resource server, per-tool scopes** | — |
+
+> **Line coverage fell from 70.1% to 36.9%, and almost none of it is a quality regression.**
+> The 70.1% figure was measured at the end of Phase 2 and never re-taken. Phase 3 then added
+> the resource provider, the subscription watcher, the prompts and the completion handler —
+> ~600 lines reachable only through a server subprocess — and Phase 4 added the two hosts, the
+> authorization setup and the origin policy on the same terms. The collector does not
+> instrument the child process, so every one of those files reads 0% while being exercised on
+> every run: `WorkspaceResourceProvider` is 166 lines at 0%, `WorkspaceResourceSubscriptions`
+> 148 at 0%, `HttpServerHost` 159 at 0%. What actually runs in-process is the tool logic, and
+> it still reports 68–100% per class.
+>
+> Two things follow, and both are owed to `F8-04`. The metric as currently collected measures
+> how much of this repository happens to be testable without a subprocess, which is not a
+> quality signal and gets worse every time a phase does its job. And **the ≥ 80% target is not
+> reachable by writing more tests** — it needs the collector attached to the server process, or
+> the target restated against what in-process coverage can honestly mean here. Recorded rather
+> than quietly deleted, because a number that only improves is a number nobody trusts.
 
 > **The scenario coverage owed since Phase 1 is rebuilt, on better ground than it stood on before.**
 > Deleting `ScenarioTests` removed 18 in-process cases against the old `IMcpTool` abstraction. The
@@ -465,6 +520,24 @@ Record every deviation from the PRD here, with the reason. This is the file that
 | 2026-08-18 | **The probe's first run found that `get_current_datetime` takes `timezone` and answers on `timeZone`, and getting it wrong is silent** | The probe passed `timeZone` as the argument. The SDK left the optional parameter at its default and the answer came back in UTC — no error, no warning, just the wrong answer. Not fixed here: renaming a shipped tool argument is a behaviour change outside this work. Noted for whoever touches `DateTimeTools` next, and the probe carries a comment at the call site. The old `EXAMPLES.md` documented it as `timezone`, correctly. |
 | 2026-08-18 | The metrics table said 159 test cases; the suite has **162** | Three tests arrived with the 2026-08-04 CI-deadlock fix and the table was not moved with them. Corrected rather than left, because a metric nobody re-measures is a metric nobody trusts. Measured on a clean build, per the 2026-08-02 entry about stale assemblies. |
 | 2026-08-18 | `examples/workspace/` documents are still Portuguese, and belong to `F8-06` with the README | The probe prints their content, so a reader now sees `# Conceitos .NET — Anotações de Estudo` in otherwise English output. `F2-09`'s criterion was `src/`, and these are sample data rather than code. Not translated here for the same reason `EXAMPLES.md` was not translated in Phase 2: they should be rewritten with the README, in one voice, not patched ahead of it. |
+| 2026-08-23 | **Phase 4 was written against a transport the specification then changed: `2026-07-28` removed `Mcp-Session-Id` (SEP-2567)** | Found the same way as Phase 3's two: a build failure, not a changelog. `IdleTimeout` and `MaxIdleSessionCount` carry `MCP9006` — *stateful Streamable HTTP mode is a back-compat-only escape hatch for legacy clients* — and `Stateless` now defaults to `true`. Stateless mode has no channel for an unsolicited server-to-client message, which silently disables `resources/list_changed`, sampling, elicitation and roots. So `F4-02` (session management) and `F4-03` (resumability) both target machinery the current revision has removed. Third phase running that spec velocity has been the headline finding, which is PRD §4's argument continuing to pay for itself. |
+| 2026-08-23 | **Stateless by default; stateful behind `--http-sessions`** — a deviation from the PRD's implied single mode | Serving only stateless would drop capabilities Phase 3 built that clients on `2025-11-25` still use. Serving only stateful would refuse `2026-07-28` clients with `-32022` and build the phase on an API the SDK marks obsolete. Both ship: the default matches the current specification, and the flag is the operator saying they have legacy clients. `Session_mode_pushes_list_changed_to_the_client` and `Stateless_mode_pushes_nothing_to_the_client` wait the same twenty seconds, so the cost of that default is an executable fact rather than a comment. |
+| 2026-08-23 | One binary with `--transport`, rather than a second ASP.NET project | The MCP surface is registered once in `McpServerRegistration` and both hosts call it, so a tool added to one cannot be missing from the other — which is what `F4-08`'s both-transports theory would otherwise be measuring. It also keeps `F8-01`'s `dotnet tool install -g` to one thing to install. The AspNetCore package carries its own `FrameworkReference`, so the project stays on `Microsoft.NET.Sdk` rather than moving to the Web SDK for a mode it serves only on request. |
+| 2026-08-23 | **The HTTP host writes nothing to stdout either, though it safely could** | stdout is only the protocol channel under stdio, so a `Console.WriteLine` in the HTTP host would corrupt nothing. It is still forbidden: the invariant is worth more than the convenience, and `grep -r Console.Write src/DotNetMcpServer.Server` returning nothing is what makes it checkable. The bound address is reported through `ILogger` to stderr, which is how the tests learn which port `--urls http://127.0.0.1:0` chose, and one test asserts stdout stays empty. |
+| 2026-08-23 | **`ClientLogBridge` was a cross-session leak waiting for a second client** | It held one client provider, bound by whichever session called `logging/setLevel` first. Over stdio, where there is exactly one session, that is correct. Over HTTP it would have delivered one client's log messages to a different client. The bridge now keeps a provider per session and selects by the `Mcp-Session-Id` of the request being handled; stdio passes no `IHttpContextAccessor` and every lookup lands on one key. Found by reading the type while wiring the second transport — there was no second session to fail a test. |
+| 2026-08-23 | The session-end hook cannot read the `HttpContext` it is handed | `RunSessionHandler` frees the per-session logger, and the obvious spelling — `httpContext.RequestServices` — throws `ObjectDisposedException: IFeatureCollection has been disposed`. That context belongs to the request which *started* the session and completed long before it ends; confirmed against a real `DELETE` returning 500. Resolved from the root container through `AddOptions<HttpServerTransportOptions>().Configure<ClientLogBridge>` instead. `MCPEXP002` suppressed narrowly: an evaluation-only API used to free memory, so if it disappears the fallback is a bounded leak rather than a broken server. |
+| 2026-08-23 | **`F4-03` is pinned to `2025-11-25`, and `2025-06-18` would have looked like a bug in this server** | Resumability needs a priming event to give the client an id to return with, and priming events postdate `2025-06-18` — the revision every other raw-HTTP case in this suite uses. On it the identical configuration emits no event ids at all: no error, no warning, just a stream with nothing to resume from. `2026-07-28` removes the standalone GET entirely, so the usable window is one revision wide. Written down because the next person here would otherwise debug the event store. |
+| 2026-08-23 | Resumability configures the SDK's event store rather than implementing `ISseEventStreamStore` | The SDK already generates event ids, retains them and replays from `Last-Event-ID`; writing that again is the reimplementation PRD §4 exists to avoid. The store is backed by `IDistributedCache`, so the in-memory registration is the single-process choice and Redis is a registration change rather than a code change. It sits inside the `--http-sessions` branch because it carries the same SEP-2567 obsoletion — there is no `Last-Event-ID` to honour without a session to replay onto. |
+| 2026-08-23 | **A request with no `Origin` is served; a literal `null` origin is refused** | The header is a browser artefact, and Claude Desktop, VS Code and the console agent send none. Refusing an absent header would lock out every real client to stop an attacker who, not being in a browser, could set any origin they liked. Loopback origins pass unconfigured for the reason they are safe: a rebinding page keeps its own origin, which is the attacker's domain. `null` is what a sandboxed iframe sends — a real origin value, and not one an operator can have meant to allow. |
+| 2026-08-23 | Authorization is off unless `--auth-authority` names one | A server launched by Claude Desktop over stdio has no authorization server to check a token against and no user to send through a consent screen. Demanding one would make the default configuration unusable rather than secure. Naming an authority is the single decision that turns the endpoint into a protected resource and the tool scopes into something enforced. |
+| 2026-08-23 | **The SDK fails closed on `[Authorize]`, and annotating the tools broke every unprotected HTTP test at once** | *Authorization filter was not invoked for tools/list operation, but authorization metadata was found on the tools.* Rather than serve a tool declaring a permission nothing checked, the SDK refuses. That is the right behaviour, and it means `AddAuthorizationFilters()` must be registered on every HTTP host rather than only the protected one — so the scope policies exist even when the server protects nothing, satisfied trivially. The same gate stated once, not a second one left open. Over stdio neither the filter nor the check is registered, so `[Authorize]` is genuinely inert there. |
+| 2026-08-23 | `BearerMethodsSupported` published `header` twice | An object initializer on a collection property appends, and the SDK pre-populates this one. The metadata document advertised two identical entries until the line was deleted rather than corrected. Caught by reading smoke-test output, and now pinned by an assertion on the exact array — the kind of defect invisible in a passing handshake and embarrassing in a published document. |
+| 2026-08-23 | The audience check is the point rather than a detail | Without it any token from an issuer this server trusts would open it, including one minted for a different MCP server entirely — the confused-deputy failure RFC 8707 exists to prevent. Four bad tokens are driven through the endpoint: wrong audience, wrong issuer, expired, and a well-formed one signed with a key the server never trusted. |
+| 2026-08-23 | `--auth-metadata-address` added, and it is a containerization concession rather than a feature | An identity provider on a compose network is `http://identity:8080` to the server and `http://localhost:8080` to the developer, and it stamps one of those into every token as `iss`. The issuer must be the address the token carries; the keys must be fetched over a name this process can resolve. Deriving one from the other is what makes the standard Docker OAuth setup fail, so the two are configured separately. |
+| 2026-08-23 | A shared signing key replaces JWKS for tests and local development | Issuer, audience, expiry and signature are validated identically whichever key source they came from, so the suite mints tokens without standing up an identity provider and stays runnable on a machine with no Docker. What it does *not* exercise is the JWKS fetch, which is exactly what `F4-07` is for — and why `F4-05` should not be read as fully exercised until that has run. |
+| 2026-08-23 | `/health` and a `--health-check` mode added outside the task list | The `HEALTHCHECK` in the Dockerfile needs a client, and the ASP.NET runtime image ships without `curl`. Adding a shell utility to a production image to answer a probe trades attack surface for convenience, so the binary asks itself: `--health-check` dials the running server and exits 0 or 1. Verified on the host — exit 1 with nothing listening, exit 0 with the server up. The endpoint is anonymous deliberately: an orchestrator holding a token would make the probe the most privileged thing in the deployment. |
+| 2026-08-23 | **`F4-07` is 🟦, not ✅ — no Docker daemon was running on this machine** | `Dockerfile`, `docker-compose.yml` and the Keycloak realm are written and committed, and the health probe they rely on is verified. `docker compose up --build` has never been executed, so the multi-stage build, the realm import, the audience mapper and the JWKS fetch are all unrun. Marking it ✅ would be the precise failure this tracker's rules exist to prevent. One Dockerfile defect was already found by reading rather than running — a comment between continued `ENV` lines, which is a parse error — and that is not evidence the rest is clean. |
+| 2026-08-23 | An unexplained flake in `A_write_token_can_call_the_tool_that_writes`, recorded rather than guessed at | Failed once in a full-suite run and never again across five subsequent full runs, and its message was not captured. Passes in isolation every time. Recorded because the 2026-08-04 entry is emphatic that a flake deserves its message read before anything is done about it, and nothing has been done about this one. Whoever meets it next should capture the assertion before touching the test. |
 
 ---
 

@@ -1,0 +1,78 @@
+# A remote MCP server behind a real authorization server.
+#
+#   docker compose up --build
+#
+# What it demonstrates is the part the SDK does not do for you: the server validating tokens it
+# did not mint, against keys it fetches from an issuer it was only told the address of. The
+# interop suite covers the same paths with a shared signing key so it can run without any of
+# this; here the keys come from JWKS, which is what a deployment actually does.
+#
+# Getting a token to try it with:
+#
+#   curl -s -d grant_type=client_credentials -d client_id=mcp-agent \
+#        -d client_secret=mcp-agent-secret -d scope='mcp:tools mcp:write' \
+#        http://localhost:8080/realms/mcp/protocol/openid-connect/token | jq -r .access_token
+#
+#   curl -i -X POST http://localhost:3001/mcp \
+#        -H "Authorization: Bearer $TOKEN" \
+#        -H 'Content-Type: application/json' \
+#        -H 'Accept: application/json, text/event-stream' \
+#        -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
+
+services:
+  identity:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: mcp-identity
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      # Pinned so every token carries the same iss no matter who asked for it. Without this
+      # Keycloak stamps whichever hostname the request arrived on, and a token fetched from the
+      # host would carry an issuer the server never expected.
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "false"
+    volumes:
+      - ./docker/keycloak:/opt/keycloak/data/import:ro
+    ports:
+      - "8080:8080"
+    healthcheck:
+      # Keycloak 26 serves health on the management port, and its image has no curl — hence
+      # the bash device rather than a utility.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-server
+    depends_on:
+      identity:
+        condition: service_healthy
+    environment:
+      MCP_TRANSPORT: http
+      MCP_WORKSPACE_ROOT: /workspace
+
+      # The issuer as it appears in the token, which is the hostname a client used.
+      MCP_AUTH_AUTHORITY: http://localhost:8080/realms/mcp
+
+      # ...and the address this container can actually reach to fetch the signing keys.
+      # The two differ because "localhost" means something different on each side of the
+      # container boundary; see McpAuthenticationSettings.MetadataAddress.
+      MCP_AUTH_METADATA_ADDRESS: http://identity:8080/realms/mcp/.well-known/openid-configuration
+
+      # This server's own identity, and the audience a token must carry to open it.
+      MCP_AUTH_RESOURCE: http://localhost:3001/mcp
+      MCP_AUTH_SCOPES: "mcp:tools,mcp:write"
+    ports:
+      - "3001:3001"
+    volumes:
+      # Writable, because append_study_note is one of the tools being demonstrated and a
+      # read-only mount would make it fail for a reason that has nothing to do with MCP. What
+      # it writes -- examples/workspace/notes/ -- is gitignored.
+      - ./examples/workspace:/workspace

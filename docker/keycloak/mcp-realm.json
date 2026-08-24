@@ -1,0 +1,63 @@
+{
+  "realm": "mcp",
+  "enabled": true,
+  "displayName": "DotNetMcpServer",
+  "accessTokenLifespan": 900,
+  "sslRequired": "none",
+
+  "clientScopes": [
+    {
+      "name": "mcp:tools",
+      "description": "Call the read-only MCP tools",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Read your workspace through MCP tools"
+      }
+    },
+    {
+      "name": "mcp:write",
+      "description": "Call the MCP tools that write to the workspace",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Write notes into your workspace"
+      }
+    }
+  ],
+
+  "clients": [
+    {
+      "clientId": "mcp-agent",
+      "name": "MCP agent",
+      "description": "A machine client that calls the MCP server on its own behalf.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "mcp-agent-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": ["roles"],
+      "optionalClientScopes": ["mcp:tools", "mcp:write"],
+      "attributes": {
+        "access.token.lifespan": "900"
+      },
+      "protocolMappers": [
+        {
+          "name": "mcp-server-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://localhost:3001/mcp",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -16,12 +16,19 @@ internal sealed record McpAuthenticationSettings
     private const string SigningKeyArgument = "--auth-signing-key";
     private const string ResourceArgument = "--auth-resource";
     private const string ScopeArgument = "--auth-scope";
+    private const string MetadataAddressArgument = "--auth-metadata-address";
 
-    private McpAuthenticationSettings(Uri authority, Uri resource, string? signingKey, IReadOnlyList<string> scopes)
+    private McpAuthenticationSettings(
+        Uri authority,
+        Uri resource,
+        string? signingKey,
+        string? metadataAddress,
+        IReadOnlyList<string> scopes)
     {
         Authority = authority;
         Resource = resource;
         SigningKey = signingKey;
+        MetadataAddress = metadataAddress;
         Scopes = scopes;
     }
 
@@ -47,6 +54,20 @@ internal sealed record McpAuthenticationSettings
     /// keys are the only ones worth trusting.
     /// </remarks>
     public string? SigningKey { get; }
+
+    /// <summary>
+    /// Where to fetch the authority's discovery document, when that is not simply the
+    /// authority's own address.
+    /// </summary>
+    /// <remarks>
+    /// Containers separate the two. An identity provider on a compose network is
+    /// <c>http://identity:8080</c> to this server and <c>http://localhost:8080</c> to the
+    /// developer's browser, and it stamps one of those into every token it issues as
+    /// <c>iss</c>. The issuer has to be the address the token actually carries, while the keys
+    /// have to be fetched over a network name this process can resolve — so the two are
+    /// configured separately rather than one being quietly derived from the other.
+    /// </remarks>
+    public string? MetadataAddress { get; }
 
     /// <summary>Scopes advertised in the protected-resource metadata document.</summary>
     public IReadOnlyList<string> Scopes { get; }
@@ -83,6 +104,7 @@ internal sealed record McpAuthenticationSettings
             authorityUri,
             resourceUri,
             Read(args, SigningKeyArgument, "MCP_AUTH_SIGNING_KEY"),
+            Read(args, MetadataAddressArgument, "MCP_AUTH_METADATA_ADDRESS"),
             ReadAll(args, ScopeArgument, "MCP_AUTH_SCOPES"));
     }
 

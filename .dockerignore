@@ -1,0 +1,30 @@
+# Everything the image does not need. Build output especially: copying a host bin/ into the
+# build stage is how a stale assembly from another configuration ends up in a container, and
+# the 2026-08-02 coverage entry in PROGRESSO.md is what that costs when it happens.
+**/bin/
+**/obj/
+**/TestResults/
+
+.git/
+.github/
+.claude/
+.vs/
+.idea/
+
+tests/
+examples/
+docs/
+notes/
+.specs/
+
+**/*.md
+!README.md
+
+.env
+.env.*
+!.env.example
+.gitignore
+.gitattributes
+.editorconfig
+docker-compose.yml
+Dockerfile

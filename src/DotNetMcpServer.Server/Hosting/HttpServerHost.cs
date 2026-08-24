@@ -186,6 +186,11 @@ internal static partial class HttpServerHost
         // before it reaches any protocol handling. See OriginPolicy for what it defends.
         var origins = OriginPolicy.Resolve(args);
 
+        // Anonymous on purpose, and separate from the MCP endpoint: a container orchestrator
+        // has no token, and asking it to hold one to find out whether the process is alive
+        // would make the probe the most privileged thing in the deployment.
+        app.MapGet(HealthCheckCommand.Path, () => Results.Ok("healthy")).AllowAnonymous();
+
         var mcpEndpoint = app.MapMcp(EndpointPattern);
 
         if (authentication is not null)
@@ -282,6 +287,15 @@ internal static partial class HttpServerHost
                 {
                     // Production: trust only what the authority publishes.
                     options.Authority = settings.Authority.ToString();
+
+                    if (settings.MetadataAddress is not null)
+                    {
+                        // Fetch the keys over a name this process can resolve, while still
+                        // requiring the issuer the tokens actually carry. See
+                        // McpAuthenticationSettings.MetadataAddress.
+                        options.MetadataAddress = settings.MetadataAddress;
+                        options.RequireHttpsMetadata = false;
+                    }
                 }
                 else
                 {
