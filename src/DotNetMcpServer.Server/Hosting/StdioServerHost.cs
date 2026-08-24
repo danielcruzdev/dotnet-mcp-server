@@ -25,7 +25,9 @@ internal static class StdioServerHost
         // filter. The console keeps its own default and is unaffected.
         builder.Logging.AddFilter<ClientLogBridge>(category: null, level: LogLevel.Trace);
 
-        builder.Services.AddSingleton<ClientLogBridge>();
+        // No IHttpContextAccessor here: stdio serves one session, so the bridge routes every
+        // log line to the same client.
+        builder.Services.AddSingleton(_ => new ClientLogBridge());
         builder.Services.AddSingleton<ILoggerProvider>(services => services.GetRequiredService<ClientLogBridge>());
 
         var mcpServer = builder.Services
